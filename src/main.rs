@@ -995,14 +995,6 @@ static ISA_DEFS: &[IsaDef] = &[
         st.advance(4)
      },
     ),
-    (b"00111111",
-     |_, _| Insn::Stc,
-     |_, st| {
-        let flags = st.flags();
-        st.set_flags(flags ^ Flags::CARRY);
-        st.advance(4)
-     },
-    ),
     (b"00101111",
      |_, _| Insn::Cma,
      |_, st| {
