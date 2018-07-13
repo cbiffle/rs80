@@ -1,0 +1,20 @@
+
+I've instrumented the emulator to record dead writes to flag bits. Here are
+stats.
+
+
+FLAG      TST8080   CPUTEST   8080PRE   8080EXM
+carry     76.72%    24.88%    86.89%    87.94%
+parity    93.91%    99.92%    97.68%    85.45%
+sign      93.91%    99.91%    97.68%    85.45%
+zero      56.96%     0.09%    10.43%    41.05%
+aux       97.39%    99.92%    99.42%    85.45%
+
+I would expect the flag usage rate to be *higher* in these test routines than in
+normal programs. So what have I learned?
+
+- The zero flag is often used.
+- The carry is in distant second.
+- The rest are rarely touched.
+
+This is all an argument for making flags lazy.
