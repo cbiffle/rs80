@@ -1,8 +1,13 @@
 /// A simple emulator for the 8080 (or, really, a clone thereof -- this is
 /// tested against an emulator for the Soviet KR580VM80A).
 
+mod lazy;
+use lazy::Lazy;
+
+use std::cell::Cell;
 use std::num::Wrapping;
 use std::io::{self, Read};
+use std::ops::{Deref,DerefMut};
 
 /// Encodings for eight-bit registers in instruction operand positions.
 #[derive(Copy, Clone, Debug)]
@@ -110,22 +115,36 @@ impl From<u8> for CC {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 struct Flags {
+    zero: bool,
     carry: bool,
+    rare: Lazy<RFS, RareFlags>,
+}
+
+#[derive(Debug)]
+struct RareFlags {
     parity: bool,
     aux: bool,
-    zero: bool,
     sign: bool,
 }
 
 impl Default for Flags {
     fn default() -> Self {
         Flags {
-            carry: false,
+            zero: Default::default(),
+            carry: Default::default(),
+
+            rare: Default::default(),
+        }
+    }
+}
+
+impl Default for RareFlags {
+    fn default() -> Self {
+        RareFlags {
             parity: false,
             aux: false,
-            zero: false,
             sign: false,
         }
     }
@@ -136,42 +155,72 @@ impl Flags {
     fn bits(&self) -> u8 {
         (self.carry as u8)
             | (1u8 << 1)  // UN1 flag always observes as 1
-            | ((self.parity as u8) << 2)
-            | ((self.aux as u8) << 4)
+            | ((self.rare.get().parity as u8) << 2)
+            | ((self.rare.get().aux as u8) << 4)
             | ((self.zero as u8) << 6)
-            | ((self.sign as u8) << 7)
+            | ((self.rare.get().sign as u8) << 7)
     }
+
+    fn from_bits(&mut self, val: u8) {
+        self.carry  = (val & (1 << 0)) != 0;
+        self.zero   = (val & (1 << 6)) != 0;
+        self.rare = Lazy::evaluated(RareFlags {
+            parity: (val & (1 << 2)) != 0,
+            aux: (val & (1 << 4)) != 0,
+            sign: (val & (1 << 7)) != 0,
+        });
+    }
+
     fn condition(&self, cc: CC) -> bool {
         match cc {
             CC::NZ => !self.zero,
             CC::Z  =>  self.zero,
             CC::NC => !self.carry,
             CC::C  =>  self.carry,
-            CC::PO => !self.parity,
-            CC::PE =>  self.parity,
-            CC::P  => !self.sign,
-            CC::N  =>  self.sign,
-        }
-    }
-
-}
-
-impl From<u8> for Flags {
-    fn from(val: u8) -> Flags {
-        fn test(a: u8, b: u8) -> bool {
-            a & b != 0
-        }
-
-        Flags {
-            carry: test(val, 1 << 0),
-            parity: test(val, 1 << 2),
-            aux: test(val, 1 << 4),
-            zero: test(val, 1 << 6),
-            sign: test(val, 1 << 7),
+            CC::PO => !self.rare.get().parity,
+            CC::PE =>  self.rare.get().parity,
+            CC::P  => !self.rare.get().sign,
+            CC::N  =>  self.rare.get().sign,
         }
     }
 }
 
+#[derive(Copy, Clone, Debug)]
+enum RFS {
+    Add(u8, u8, u8, u8),
+    Inc(u8),
+    Dec(u8),
+    And(u8, u8, u8),
+}
+
+impl lazy::Thunk for RFS {
+    type Result = RareFlags;
+
+    fn thunk(self) -> Self::Result {
+        match self {
+            RFS::Add(a, b, c, sum) => RareFlags {
+                sign: sum & 0x80 != 0,
+                aux: ((a & 0xF) + (b & 0xF) + c) & 0x10 != 0,
+                parity: sum.count_ones() % 2 == 0,
+            },
+            RFS::Inc(sum) => RareFlags {
+                aux: (sum & 0xF) == 0,
+                parity: sum.count_ones() % 2 == 0,
+                sign: sum & 0x80 != 0,
+            },
+            RFS::Dec(sum) => RareFlags {
+                aux: (sum & 0xF) != 0xF,
+                parity: sum.count_ones() % 2 == 0,
+                sign: sum & 0x80 != 0,
+            },
+            RFS::And(a, b, ab) => RareFlags {
+                aux: (a & 0x8) | (b & 0x8) != 0,
+                sign: ab & 0x80 != 0,
+                parity: ab.count_ones() % 2 == 0,
+            },
+        }
+    }
+}
 
 type Imm8 = u8;
 type Imm16 = u16;
@@ -441,11 +490,9 @@ fn add(a: W8, b: W8, c: u8, flags: &mut Flags) -> W8 {
     let sum16 = a.0 as u16 + b.0 as u16 + c as u16;
    
     let sum8 = sum16 as u8;
-    flags.sign = sum8 & 0x80 != 0;
     flags.zero = sum8 == 0;
     flags.carry = sum16 & 0x100 != 0;
-    flags.parity = sum8.count_ones() % 2 == 0;
-    flags.aux = ((a.0 & 0xF) + (b.0 & 0xF) + c) & 0x10 != 0;
+    flags.rare = Lazy::suspended(RFS::Add(a.0, b.0, c, sum8));
 
     Wrapping(sum8)
 }
@@ -453,10 +500,8 @@ fn add(a: W8, b: W8, c: u8, flags: &mut Flags) -> W8 {
 fn inc(a: W8, flags: &mut Flags) -> W8 {
     let sum = a + Wrapping(1);
    
-    flags.sign = sum.0 & 0x80 != 0;
     flags.zero = sum.0 == 0;
-    flags.parity = sum.0.count_ones() % 2 == 0;
-    flags.aux = (sum.0 & 0xF) == 0;
+    flags.rare = Lazy::suspended(RFS::Inc(sum.0));
 
     sum
 }
@@ -464,10 +509,8 @@ fn inc(a: W8, flags: &mut Flags) -> W8 {
 fn dec(a: W8, flags: &mut Flags) -> W8 {
     let sum = a - Wrapping(1);
    
-    flags.sign = sum.0 & 0x80 != 0;
     flags.zero = sum.0 == 0;
-    flags.parity = sum.0.count_ones() % 2 == 0;
-    flags.aux = (sum.0 & 0xF) != 0xF;
+    flags.rare = Lazy::suspended(RFS::Dec(sum.0));
 
     sum
 }
@@ -476,10 +519,8 @@ fn and(a: W8, b: W8, flags: &mut Flags) -> W8 {
     let sum16 = a.0 as u16 & b.0 as u16;
    
     let sum8 = sum16 as u8;
-    flags.sign = sum8 & 0x80 != 0;
     flags.zero = sum8 == 0;
-    flags.parity = sum8.count_ones() % 2 == 0;
-    flags.aux = ((a.0 & 0x8) | (b.0 & 0x8)) != 0;
+    flags.rare = Lazy::suspended(RFS::And(a.0, b.0, sum8));
     flags.carry = false;
 
     Wrapping(sum8)
@@ -489,11 +530,9 @@ fn or(a: W8, b: W8, flags: &mut Flags) -> W8 {
     let sum16 = a.0 as u16 | b.0 as u16;
    
     let sum8 = sum16 as u8;
-    flags.sign = sum8 & 0x80 != 0;
     flags.zero = sum8 == 0;
-    flags.parity = sum8.count_ones() % 2 == 0;
     flags.carry = false;
-    flags.aux = false;
+    flags.rare = Lazy::suspended(RFS::And(0, 0, sum8));
 
     Wrapping(sum8)
 }
@@ -502,11 +541,9 @@ fn xor(a: W8, b: W8, flags: &mut Flags) -> W8 {
     let sum16 = a.0 as u16 ^ b.0 as u16;
    
     let sum8 = sum16 as u8;
-    flags.sign = sum8 & 0x80 != 0;
     flags.zero = sum8 == 0;
-    flags.parity = sum8.count_ones() % 2 == 0;
     flags.carry = false;
-    flags.aux = false;
+    flags.rare= Lazy::suspended(RFS::And(0, 0, sum8));
 
     Wrapping(sum8)
 }
@@ -515,21 +552,15 @@ fn sub(a: W8, b: W8, c: u8, flags: &mut Flags) -> W8 {
     let sum16 = (Wrapping(a.0 as u16) - Wrapping(b.0 as u16) - Wrapping(c as u16)).0;
    
     let sum8 = sum16 as u8;
-    flags.sign = sum8 & 0x80 != 0;
     flags.zero = sum8 == 0;
     flags.carry = sum16 & 0x100 != 0;
-    flags.parity = sum8.count_ones() % 2 == 0;
-    flags.aux = (Wrapping(a.0 & 0xF) + Wrapping(!b.0 & 0xF)
-        + Wrapping(1 - c)).0 & 0x10 != 0;
+    flags.rare= Lazy::suspended(RFS::Add(a.0, !b.0, 1 - c, sum8));
 
     Wrapping(sum8)
 }
 
-fn compare(a: W8, b: W8) -> Flags {
-    // TODO: unnecessary
-    let mut flags = Flags::default();
-    let _ = sub(a, b, 0, &mut flags);
-    flags
+fn compare(a: W8, b: W8, flags: &mut Flags) {
+    sub(a, b, 0, flags);
 }
 
 type IsaDef = (&'static [u8],
@@ -727,7 +758,7 @@ static ISA_DEFS: &[IsaDef] = &[
      |_, st| {
          let psw = st.pop().0;
          st.set_reg(Reg8::A, Wrapping((psw >> 8) as u8));
-         st.flags = (psw as u8).into();
+         st.flags.from_bits(psw as u8);
          st.advance(10)
      }
     ),
@@ -927,7 +958,7 @@ static ISA_DEFS: &[IsaDef] = &[
          let rm = opcode.bits(2,0);
          let a = st.reg(Reg8::A);
          let b = st.reg_m(rm);
-         st.flags = compare(a, b);
+         compare(a, b, &mut st.flags);
          st.advance(rm.reg_or_m(4, 7))
      },
     ),
@@ -936,7 +967,7 @@ static ISA_DEFS: &[IsaDef] = &[
      |_, st| {
          let a = st.reg(Reg8::A);
          let b = st.take_imm8();
-         st.flags = compare(a, b);
+         compare(a, b, &mut st.flags);
          st.advance(7)
      },
     ),
@@ -1056,7 +1087,7 @@ static ISA_DEFS: &[IsaDef] = &[
          let mut carry = st.flags.carry;
          let a = st.reg(Reg8::A);
          let mut b = 0;
-         if st.flags.aux || (a.0 & 0xF) > 9 {
+         if st.flags.rare.get().aux || (a.0 & 0xF) > 9 {
              b = 6;
          }
          if st.flags.carry ||

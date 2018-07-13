@@ -18,3 +18,6 @@ normal programs. So what have I learned?
 - The rest are rarely touched.
 
 This is all an argument for making flags lazy.
+
+
+Making flags lazy saves ~2%.
