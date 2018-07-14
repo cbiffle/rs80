@@ -21,8 +21,6 @@ fn main() -> std::io::Result<()> {
         println!("{} / 256 encodings covered.", covered);
     }
 
-    let table = make_dispatch_table();
-
     let mut args = std::env::args();
     args.next();
 
@@ -37,7 +35,7 @@ fn main() -> std::io::Result<()> {
     let start = PreciseTime::now();
     let out = io::stdout();
     let mut out = out.lock();
-    match run(&mut emu, &table, &mut out) {
+    match run(&mut emu, &mut out) {
         Ok(final_pc) => println!("\nWARM BOOT from {:04X}", final_pc),
         Err(RunError::UnhandledBdosCall(c, pc)) =>
             println!("\nERROR: unhandled BDOS call {} at {:04X}", c, pc),

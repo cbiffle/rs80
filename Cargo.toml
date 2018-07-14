@@ -4,8 +4,8 @@ version = "0.1.0"
 authors = ["Cliff L. Biffle <code@cliffle.com>"]
 
 [dependencies]
-bitflags = "1.0"
 time = "0.1.40"
+lazy_static = "1.0"
 
 [profile.release]
 debug = true
