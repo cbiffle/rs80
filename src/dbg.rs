@@ -78,8 +78,8 @@ impl Mon {
                 } else {
                     write!(&mut out, "Usage: j <addr>\n")?
                 },
-                "s" => self.step(&mut out)?,
-                "g" => self.go(&mut out)?,
+                "s" => self.go_step(true, &mut out)?,
+                "g" => self.go_step(false, &mut out)?,
                 "b" => self.breakpoint_cmd(&words, &mut out)?,
                 "@" => self.ram_cmd(&words, &mut out)?,
                 _ => write!(&mut out, "what\n")?,
@@ -225,48 +225,65 @@ impl Mon {
         }
     }
 
-    fn go(&mut self,
-          out: &mut impl Write) -> io::Result<()> {
-        self.install_breakpoints();
-        let r = emu::run(&mut self.machine);
-        self.remove_breakpoints();
-        match r {
-            Ok((last_pc, pc)) => {
-                // Check if there is a breakpoint at this address. If so, we
-                // need to prepare to re-execute the instruction.
-                if let Some(_) = self.breakpoints.remove(&pc) {
-                    // Back up to the breakpoint.
-                    self.machine.jump(Wrapping(pc));
-                    write!(out, "Breakpoint @{:04X}, last PC = {:04X}\n",
-                           pc, last_pc)
-                } else {
-                    write!(out, "HLT @{:04X}, last PC = {:04X}\n",
-                           pc, last_pc)
-                }
-            },
-            Err(emu::RunError::UnimplementedInstruction(op, addr)) =>
-                write!(out, "UNIMPLEMENTED {:02X} @{:04X}\n", op, addr),
-        }
-    }
-
-    fn step(&mut self,
-            out: &mut impl Write) -> io::Result<()> {
-        let pc = self.machine.get_pc();
-        self.install_breakpoints();
-        let r = emu::step(&mut self.machine);
-        self.remove_breakpoints();
-        match r {
-            Ok(true) => {
-                if let Some(bp) = self.breakpoints.remove(&pc) {
-                    // Back up to re-run the broken instruction.
-                    self.machine.jump(Wrapping(pc));
-                    write!(out, "Breakpoint @{:04X}\n", pc)?
-                } else {
+    fn go_step(&mut self,
+               step: bool,
+               out: &mut impl Write) -> io::Result<()> {
+        let starting_pc = self.machine.get_pc();
+        if self.breakpoints.contains_key(&starting_pc) {
+            // After stopping at a breakpoint, we want stepping or running again
+            // to succeed. So we will step without installing breakpoints just
+            // yet.
+            match emu::step(&mut self.machine) {
+                // Halted anyway -- program literally contains a HLT here.
+                Ok(true) => {
                     write!(out, "(halt)\n")?
+                },
+                Ok(_) => (),
+                Err(emu::RunError::UnimplementedInstruction(op, addr)) => {
+                    write!(out, "UNIMPLEMENTED {:02X} @{:04X}\n", op, addr)?;
+                    return Ok(())
                 }
+            }
+            // We may have arrived at a new breakpoint; report it if so.
+            if self.breakpoints.contains_key(&self.machine.get_pc()) {
+                write!(out, "Breakpoint @{:04X}\n", self.machine.get_pc())?;
+            }
+            // If we were only stepping, then we're now done.
+            if step { return Ok(()) }
+        }
+
+        // Single step of non-breakpoint or run past breakpoint.
+        self.install_breakpoints();
+        let r = if step {
+            emu::step(&mut self.machine)
+        } else {
+            emu::run(&mut self.machine).map(|_| true)
+        };
+        self.remove_breakpoints();
+        match r {
+            Ok(halted) => {
+                if halted {
+                    let halt_addr = self.machine.get_pc() - 1;
+                    // Check if there is a breakpoint at this address. If so, we
+                    // need to prepare to re-execute the instruction if we
+                    // halted.
+                    if self.breakpoints.contains_key(&halt_addr) {
+                        // Back up to the breakpoint.
+                        self.machine.jump(Wrapping(halt_addr));
+                        write!(out, "Breakpoint @{:04X}\n", halt_addr)?;
+                        return Ok(())
+                    } else {
+                        // This was a literal halt instruction in the program.
+                        write!(out, "(halt)\n")?
+                    }
+                }
+
+                if self.breakpoints.contains_key(&self.machine.get_pc()) {
+                    write!(out, "Breakpoint @{:04X}\n", self.machine.get_pc())?;
+                }
+
                 Ok(())
             },
-            Ok(false) => Ok(()),
             Err(emu::RunError::UnimplementedInstruction(op, addr)) =>
                 write!(out, "UNIMPLEMENTED {:02X} @{:04X}\n", op, addr),
         }
