@@ -4,7 +4,9 @@
 extern crate time;
 extern crate rs80;
 
-use rs80::*;
+use rs80::emu::{Emu, RunError};
+use rs80::ops::make_decode_table;
+use rs80::bdos::*;
 
 use std::io;
 use time::PreciseTime;

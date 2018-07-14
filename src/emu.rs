@@ -1,6 +1,7 @@
 use std::num::Wrapping;
 
-use super::isa::{CC, Reg, RegM, RegPair};
+use super::isa::{CC, Reg, RegM, RegPair, Opcode};
+use super::ops;
 
 /// Holds the CPU condition flags.
 ///
@@ -281,3 +282,34 @@ impl Ports for () {
     fn write_port(&mut self, _: u8, _: u8) {}
     fn read_port(&mut self, _: u8) -> u8 { 0 }
 }
+
+#[derive(Copy, Clone, Debug)]
+pub enum RunError {
+    /// Instruction not implemented at address.
+    UnimplementedInstruction(u8, u16),
+}
+
+/// Runs the emulation until the machine encounters a `HLT` (or an illegal
+/// instruction).
+#[inline]
+pub fn run(emu: &mut Emu) -> Result<(u16, u16), RunError> {
+    let table: &[Option<_>; 256] = &ops::DISPATCH;
+    let mut pc = 0xFFFF;
+    let mut last_pc;
+
+    let mut ctx = ops::Ctx { io: &mut () };
+
+    loop {
+        last_pc = pc;
+        pc = emu.get_pc();
+        let op = emu.take_imm8().0;
+        let halted = match table[op as usize] {
+            None => return Err(RunError::UnimplementedInstruction(
+                    op, last_pc)),
+            Some(f) => f(Opcode(op), emu, &mut ctx),
+        };
+        if halted { return Ok((last_pc, emu.get_pc() - 1)) }
+    }
+}
+
+
