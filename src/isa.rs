@@ -133,100 +133,15 @@ impl Opcode {
         let width = hi - lo + 1;
         ((self.0 >> lo) & ((1 << width) - 1)).into()
     }
-}
 
+    pub fn con(self, hi: u32, lo: u32) -> u8 {
+        self.bits(hi, lo)
+    }
+    pub fn regm(self, hi: u32, lo: u32) -> RegM {
+        self.bits(hi, lo)
+    }
 
-/// Alias for `u8` when serving as an immediate.
-pub type Imm8 = u8;
-/// Alias for `u16` when serving as an immediate.
-pub type Imm16 = u16;
-/// Alias for `u16` when serving as a direct memory address.
-pub type Addr = u16;
-/// Alias for `u8` when serving as a restart address.
-pub type Restart = u8;
-/// Alias for `u8` when serving as a literal port number.
-pub type Port = u8;
-
-/// High-level encoding of the 8080 instruction set.
-///
-/// This isn't used in the emulator, but is used by debugging support.
-///
-/// This encoding is both over-general and lossy: over-general in that it can
-/// encode instructions that are not actually legal (see the `is_valid`
-/// predicate), and lossy in that instructions with multiple representations all
-/// decode to the same `Insn`.
-#[derive(Copy, Clone, Debug)]
-pub enum Insn {
-    Mov(Reg, Reg),
-    MovToM(Reg),
-    MovFromM(Reg),
-
-    Mvi(Reg, Imm8),
-    MviToM(Imm8),
-
-    Lxi(RegPair, Imm16),
-
-    Lda(Addr),
-    Sta(Addr),
-    Lhld(Addr),
-    Shld(Addr),
-    Ldax(RegPair),
-    Stax(RegPair),
-
-    Xchg,
-
-    Add(RegM),
-    Adi(Imm8),
-    Adc(RegM),
-    Aci(Imm8),
-    Sub(RegM),
-    Sui(Imm8),
-    Sbb(RegM),
-    Sbi(Imm8),
-    Inr(RegM),
-    Dcr(RegM),
-    Inx(RegPair),
-    Dcx(RegPair),
-    Dad(RegPair),
-    
-    Daa,
-
-    Ana(RegM),
-    Ani(Imm8),
-    Ora(RegM),
-    Ori(Imm8),
-    Xra(RegM),
-    Xri(Imm8),
-    Cmp(RegM),
-    Cpi(Imm8),
-    
-    Rlc,
-    Rrc,
-    Ral,
-    Rar,
-    Cma,
-    Cmc,
-    Stc,
-
-    Jmp(Addr),
-    J(CC, Addr),
-    Call(Addr),
-    C(CC, Addr),
-    Ret,
-    R(CC),
-    Rst(Restart),
-
-    Pchl,
-    Push(RegPair),
-    PushPSW,
-    Pop(RegPair),
-    PopPSW,
-    Xthl,
-    Sphl,
-    In(Port),
-    Out(Port),
-    Ei,
-    Di,
-    Hlt,
-    Nop,
+    pub fn rp(self, hi: u32, lo: u32) -> RegPair {
+        self.bits(hi, lo)
+    }
 }

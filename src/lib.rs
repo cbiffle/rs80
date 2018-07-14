@@ -8,6 +8,7 @@ mod lazy;
 pub mod isa;
 pub mod emu;
 pub mod ops;
+pub mod dis;
 
 use std::num::Wrapping;
 use std::io::{self, Read};
