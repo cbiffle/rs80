@@ -36,7 +36,7 @@ struct Breakpoint {
     orig: u8,
 }
 
-const HLT: u8 = 76;
+const HLT: u8 = 0x76;
 
 impl Mon {
     pub fn run(&mut self) -> io::Result<()> {
@@ -80,6 +80,8 @@ impl Mon {
                 },
                 "s" => self.step(&mut out)?,
                 "g" => self.go(&mut out)?,
+                "b" => self.breakpoint_cmd(&words, &mut out)?,
+                "@" => self.ram_cmd(&words, &mut out)?,
                 _ => write!(&mut out, "what\n")?,
             }
         }
@@ -208,7 +210,9 @@ impl Mon {
     fn install_breakpoints(&mut self) {
         for (addr, bp) in self.breakpoints.iter_mut() {
             let addr = *addr as usize;
+            // Back up the program byte at the breakpoint address.
             bp.orig = self.machine.mem[addr];
+            // Substitute it for a HLT.
             self.machine.mem[addr] = HLT;
         }
     }
@@ -216,6 +220,7 @@ impl Mon {
     fn remove_breakpoints(&mut self) {
         for (addr, bp) in self.breakpoints.iter_mut() {
             let addr = *addr as usize;
+            // Restore the program byte.
             self.machine.mem[addr] = bp.orig;
         }
     }
@@ -227,7 +232,11 @@ impl Mon {
         self.remove_breakpoints();
         match r {
             Ok((last_pc, pc)) => {
-                if let Some(bp) = self.breakpoints.remove(&pc) {
+                // Check if there is a breakpoint at this address. If so, we
+                // need to prepare to re-execute the instruction.
+                if let Some(_) = self.breakpoints.remove(&pc) {
+                    // Back up to the breakpoint.
+                    self.machine.jump(Wrapping(pc));
                     write!(out, "Breakpoint @{:04X}, last PC = {:04X}\n",
                            pc, last_pc)
                 } else {
@@ -249,13 +258,84 @@ impl Mon {
         match r {
             Ok(true) => {
                 if let Some(bp) = self.breakpoints.remove(&pc) {
+                    // Back up to re-run the broken instruction.
+                    self.machine.jump(Wrapping(pc));
                     write!(out, "Breakpoint @{:04X}\n", pc)?
+                } else {
+                    write!(out, "(halt)\n")?
                 }
                 Ok(())
             },
             Ok(false) => Ok(()),
             Err(emu::RunError::UnimplementedInstruction(op, addr)) =>
                 write!(out, "UNIMPLEMENTED {:02X} @{:04X}\n", op, addr),
+        }
+    }
+
+    fn breakpoint_cmd(&mut self,
+                      words: &[&str],
+                      out: &mut impl Write) -> io::Result<()> {
+        match words.len() {
+            1 => {
+                write!(out, "Breakpoints:\n")?;
+                for k in self.breakpoints.keys() {
+                    write!(out, "\t{:04X}\n", k)?
+                }
+                Ok(())
+            },
+            2 => {
+                let arg = words[1];
+                if arg.starts_with("-") {
+                    match u16::from_str_radix(&arg[1..], 16) {
+                        Err(_) => write!(out, "Bad address: {}\n", arg)?,
+                        Ok(a) => {
+                            let p = self.breakpoints.remove(&a);
+                            if p.is_none() {
+                                write!(out, "Warning: no such breakpoint\n")?
+                            }
+                        },
+                    }
+                    Ok(())
+                } else {
+                    match u16::from_str_radix(arg, 16) {
+                        Err(_) => write!(out, "Bad address: {}\n", arg),
+                        Ok(a) => {
+                            let bp = Breakpoint { orig: 0 };
+                            let p = self.breakpoints.insert(a, bp);
+                            if p.is_some() {
+                                write!(out, "Warning: duplicate\n")?
+                            }
+                            Ok(())
+                        },
+                    }
+                }
+            },
+            _ => write!(out, "Usage:\nb\nb <addr>\nb -<addr>\n"),
+        }
+    }
+    fn ram_cmd(&mut self,
+               words: &[&str],
+               out: &mut impl Write) -> io::Result<()> {
+        if words.len() < 2 || words.len() > 3 {
+            return write!(out, "Usage:\n@ <addr>\n@ <addr> <val>\n")
+        }
+
+        let addr = match u16::from_str_radix(words[1], 16) {
+            Err(_) => return write!(out, "Bad address: {}\n", words[1]),
+            Ok(a) => a,
+        };
+
+        if words.len() == 2 {
+            write!(out, "\t{:04X}\t{:02X}\n",
+                   addr,
+                   self.machine.mem[addr as usize])
+        } else {
+            let val = match u8::from_str_radix(words[2], 16) {
+                Err(_) => return write!(out, "Bad value: {}\n", words[1]),
+                Ok(a) => a,
+            };
+            self.machine.mem[addr as usize] = val;
+            Ok(())
         }
     }
 }

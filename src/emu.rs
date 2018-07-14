@@ -292,6 +292,11 @@ pub enum RunError {
 
 /// Runs the emulation until the machine encounters a `HLT` (or an illegal
 /// instruction).
+///
+/// On halt, returns `Ok(last_pc, pc)`, where `pc` is the address of the `HLT`
+/// instruction, and `last_pc` is the address of the instruction executed just
+/// before it. (This is often `pc-1`, but may differ if the `HLT` was reached by
+/// a call or jump.)
 #[inline]
 pub fn run(emu: &mut Emu) -> Result<(u16, u16), RunError> {
     let table: &[Option<_>; 256] = &ops::DISPATCH;
@@ -301,18 +306,23 @@ pub fn run(emu: &mut Emu) -> Result<(u16, u16), RunError> {
     let mut ctx = ops::Ctx { io: &mut () };
 
     loop {
+        // Move last instruction start into previous buffer.
         last_pc = pc;
+        // Record start of this instruction.
         pc = emu.get_pc();
         let op = emu.take_imm8().0;
         let halted = match table[op as usize] {
             None => return Err(RunError::UnimplementedInstruction(op, last_pc)),
             Some(f) => f(Opcode(op), emu, &mut ctx),
         };
-        if halted { return Ok((last_pc, emu.get_pc() - 1)) }
+        if halted { return Ok((last_pc, pc)) }
     }
 }
 
 /// Steps the emulation by one instruction.
+///
+/// On success, returns `Ok(halted)`, where `halted` is a flag indicating
+/// whether the executed instruction was a `HLT`.
 #[inline]
 pub fn step(emu: &mut Emu) -> Result<bool, RunError> {
     let table: &[Option<_>; 256] = &ops::DISPATCH;
@@ -327,5 +337,3 @@ pub fn step(emu: &mut Emu) -> Result<bool, RunError> {
     };
     Ok(halted)
 }
-
-
