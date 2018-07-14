@@ -85,9 +85,6 @@ pub struct Emu {
     pc: W16,
     /// Memory image. You can't tell from the type, but this is 64kiB.
     pub mem: Vec<u8>,
-    /// Has the CPU been halted? Set by `HLT` instruction, cleared at reset or
-    /// by calling `run` again.
-    halted: bool,
     /// Cycle counter, increments for every 8080 cycle (*not* every emulated
     /// instruction).
     pub cycles: usize,
@@ -106,7 +103,6 @@ impl Default for Emu {
             sp: Wrapping(0),
             pc: Wrapping(0),
             mem: vec![0; 0x1_0000],
-            halted: false,
             cycles: 0,
             interrupts: false,
             flags: Flags::default(),
@@ -177,8 +173,12 @@ impl Emu {
     }
 
     /// Increments the cycle counter by `n`.
-    pub fn advance(&mut self, n: usize) {
-        self.cycles += n
+    ///
+    /// This is often the last thing to be called by a dispatch function, so it
+    /// returns `false` (meaning "not halted") for convenience.
+    pub fn advance(&mut self, n: usize) -> bool {
+        self.cycles += n;
+        false
     }
 
     /// Stores `val` to memory at `addr`.
@@ -223,11 +223,6 @@ impl Emu {
         v
     }
 
-    /// Sets the halt flag.
-    pub fn halt(&mut self) {
-        self.halted = true
-    }
-
     /// Effects a jump to `addr` by replacing the PC.
     pub fn jump(&mut self, addr: W16) {
         self.pc = addr
@@ -263,21 +258,12 @@ impl Emu {
         self.interrupts = f
     }
 
-    pub fn clear_halt_flag(&mut self) {
-        self.halted = false
-    }
-
     pub fn memory(&self) -> &[u8] {
         &self.mem[..]
     }
     
     pub fn memory_mut(&mut self) -> &mut [u8] {
         &mut self.mem[..]
-    }
-
-    #[inline]
-    pub fn is_halted(&self) -> bool {
-        self.halted
     }
 
     #[inline]

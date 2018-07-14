@@ -35,17 +35,15 @@ fn main() -> std::io::Result<()> {
     let start = PreciseTime::now();
     let out = io::stdout();
     let mut out = out.lock();
-    match run(&mut emu, &mut out) {
+    match run_bdos(&mut emu, &mut out) {
         Ok(final_pc) => println!("\nWARM BOOT from {:04X}", final_pc),
-        Err(RunError::UnhandledBdosCall(c, pc)) =>
+        Err(BdosError::UnhandledBdosCall(c, pc)) =>
             println!("\nERROR: unhandled BDOS call {} at {:04X}", c, pc),
-        Err(RunError::BadJump(dest, src)) =>
-            println!("\nERROR: bad jump to {:04X} from {:04X}", dest, src),
-        Err(RunError::UnimplementedInstruction(op, pc)) =>
-            println!("\nERROR: unimplemented: {:02X} at {:04X}", op, pc),
-        Err(RunError::Halted(pc)) =>
+        Err(BdosError::Halted(pc)) =>
             println!("\nHALTED at {:04X}", pc),
-        Err(RunError::Out(e)) => return Err(e),
+        Err(BdosError::Out(e)) => return Err(e),
+        Err(BdosError::RunError(RunError::UnimplementedInstruction(op, pc))) =>
+            println!("\nERROR: unimplemented: {:02X} at {:04X}", op, pc),
     }
     let duration = start.to(PreciseTime::now());
     let cycle_ns = duration.num_nanoseconds().unwrap() as f64

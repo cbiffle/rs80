@@ -101,7 +101,7 @@ pub struct Ctx<'a> {
     pub io: &'a mut Ports,
 }
 
-type DispatchFn = fn(Opcode, &mut Emu, &mut Ctx);
+type DispatchFn = fn(Opcode, &mut Emu, &mut Ctx) -> bool;
 
 type IsaDef = (&'static [u8],
                fn(Opcode) -> InsnInfo,
@@ -110,8 +110,8 @@ static ISA_DEFS: &[IsaDef] = &[
     (b"01110110",
      |_| InsnInfo::inherent("HLT"),
      |_, st, _| {
-         st.halt();
-         st.advance(4);  // Seriously.
+         st.advance(4);
+         true
      }
     ),
     (b"01110sss",
