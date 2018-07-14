@@ -12,14 +12,10 @@ pub mod dis;
 use std::num::Wrapping;
 use std::io::{self, Read};
 
-// TODO
-use isa::Reg as Reg8;
-use isa::RegPair;
-use isa::Opcode;
+use isa::{Reg, RegPair, Opcode};
 
 pub use emu::Emu;
 pub use ops::make_decode_table;
-// TODO
 
 pub fn load_image(path: String, emu: &mut Emu) -> io::Result<()> {
     let mut file = std::fs::File::open(path)?;
@@ -90,7 +86,7 @@ pub fn run_bdos<W>(emu: &mut Emu,
                 match halt_addr {
                     5 => {
                         // CP/M syscall restart address
-                        match emu.reg(Reg8::C).0 {
+                        match emu.reg(Reg::C).0 {
                             9 => {
                                 // Type string
                                 let mut addr = emu.reg_pair(RegPair::DE);
@@ -104,12 +100,12 @@ pub fn run_bdos<W>(emu: &mut Emu,
                             },
                             2 => {
                                 // Put character
-                                let c = emu.reg(Reg8::E).0;
+                                let c = emu.reg(Reg::E).0;
                                 out.write(&[c])
                                     .map_err(BdosError::Out)?;
                             },
                             _ => return Err(BdosError::UnhandledBdosCall(
-                                    emu.reg(Reg8::C).0, last_pc)),
+                                    emu.reg(Reg::C).0, last_pc)),
                         }
                     },
                     0 => {
