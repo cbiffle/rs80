@@ -237,7 +237,7 @@ static ISA_DEFS: &[IsaDef] = &[
          st.advance(11)
      }
     ),
-    (b"11001101",
+    (b"11__1101",
      |_| InsnInfo::unary("CALL", Operand::Addr),
      |_, st, _| {
          let addr = st.take_imm16();
@@ -257,7 +257,7 @@ static ISA_DEFS: &[IsaDef] = &[
          }
      }
     ),
-    (b"11001001",
+    (b"110_1001",
      |_| InsnInfo::inherent("RET"),
      |_, st, _| {
          st.ret();
@@ -310,7 +310,7 @@ static ISA_DEFS: &[IsaDef] = &[
          st.advance(10)
      }
     ),
-    (b"11000011",
+    (b"1100_011",
      |_| InsnInfo::unary("JMP", Operand::Addr),
      |_, st, _| {
          let addr = st.take_imm16();

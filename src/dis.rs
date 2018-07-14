@@ -6,7 +6,6 @@ pub enum Operand {
     RP(RegPair),
     PSW,
     C3(u8),
-    CC(CC),
     I8,
     Port8,
     I16,
@@ -23,10 +22,6 @@ impl From<RegPair> for Operand {
 
 impl From<u8> for Operand {
     fn from(v: u8) -> Operand { Operand::C3(v) }
-}
-
-impl From<CC> for Operand {
-    fn from(v: CC) -> Operand { Operand::CC(v) }
 }
 
 #[derive(Copy, Clone, Debug)]
