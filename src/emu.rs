@@ -7,7 +7,7 @@ use super::ops;
 ///
 /// This is represented as a struct of bools, rather than a packed byte, because
 /// doing so significantly improves emulator performance.
-#[derive(Debug)]
+#[derive(Copy, Clone, Debug)]
 pub struct Flags {
     /// Result was zero.
     pub zero: bool,
@@ -75,6 +75,7 @@ pub type W8 = Wrapping<u8>;
 pub type W16 = Wrapping<u16>;
 
 /// Emulator state.
+#[derive(Clone, Debug)]
 pub struct Emu {
     /// 8-bit registers in encoding order, with placeholder at index 6.
     registers: [W8; 8],
@@ -304,12 +305,27 @@ pub fn run(emu: &mut Emu) -> Result<(u16, u16), RunError> {
         pc = emu.get_pc();
         let op = emu.take_imm8().0;
         let halted = match table[op as usize] {
-            None => return Err(RunError::UnimplementedInstruction(
-                    op, last_pc)),
+            None => return Err(RunError::UnimplementedInstruction(op, last_pc)),
             Some(f) => f(Opcode(op), emu, &mut ctx),
         };
         if halted { return Ok((last_pc, emu.get_pc() - 1)) }
     }
+}
+
+/// Steps the emulation by one instruction.
+#[inline]
+pub fn step(emu: &mut Emu) -> Result<bool, RunError> {
+    let table: &[Option<_>; 256] = &ops::DISPATCH;
+
+    let mut ctx = ops::Ctx { io: &mut () };
+
+    let last_pc = emu.get_pc();
+    let op = emu.take_imm8().0;
+    let halted = match table[op as usize] {
+        None => return Err(RunError::UnimplementedInstruction(op, last_pc)),
+        Some(f) => f(Opcode(op), emu, &mut ctx),
+    };
+    Ok(halted)
 }
 
 
