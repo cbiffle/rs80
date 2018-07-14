@@ -4,7 +4,6 @@
 #[macro_use]
 extern crate lazy_static;
 
-mod lazy;
 pub mod isa;
 pub mod emu;
 pub mod ops;
