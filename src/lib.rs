@@ -51,6 +51,8 @@ pub fn run<W>(emu: &mut Emu,
     let table: &[Option<_>; 256] = &ops::DISPATCH;
     let mut last_pc = 0;
 
+    let mut ctx = ops::Ctx { io: &mut () };
+
     while !emu.is_halted() {
         if emu.get_pc() < 0x100 {
             match emu.get_pc() {
@@ -91,7 +93,7 @@ pub fn run<W>(emu: &mut Emu,
         match table[op as usize] {
             None => return Err(RunError::UnimplementedInstruction(
                     op, last_pc)),
-            Some(f) => f(Opcode(op), emu),
+            Some(f) => f(Opcode(op), emu, &mut ctx),
         }
     }
 

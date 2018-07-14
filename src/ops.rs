@@ -1,7 +1,7 @@
 use std::num::Wrapping;
 
 use super::isa::{Insn, Opcode, Reg, RegPair};
-use super::emu::{Emu, Flags, W8};
+use super::emu::{Emu, Flags, W8, Ports};
 
 fn u16_from_slice(slice: &[u8]) -> u16 {
     (slice[0] as u16) | ((slice[1] as u16) << 8)
@@ -100,20 +100,26 @@ fn compare(a: W8, b: W8, flags: &mut Flags) {
     sub(a, b, 0, flags);
 }
 
+pub struct Ctx<'a> {
+    pub io: &'a mut Ports,
+}
+
+type DispatchFn = fn(Opcode, &mut Emu, &mut Ctx);
+
 type IsaDef = (&'static [u8],
                fn(Opcode, &[u8]) -> Insn,
-               fn(Opcode, &mut Emu));
+               DispatchFn);
 static ISA_DEFS: &[IsaDef] = &[
     (b"01110110",
      |_, _| Insn::Hlt,
-     |_, st| {
+     |_, st, _| {
          st.halt();
          st.advance(4);  // Seriously.
      }
     ),
     (b"01110sss",
      |opcode, _| Insn::MovToM(opcode.bits(2,0)),
-     |opcode, st| {
+     |opcode, st, _| {
          let v = st.reg(opcode.bits(2,0));
          let addr = st.reg_pair(RegPair::HL);
          st.store(addr, v);
@@ -122,7 +128,7 @@ static ISA_DEFS: &[IsaDef] = &[
     ),
     (b"01ddd110",
      |opcode, _| Insn::MovFromM(opcode.bits(5,3)),
-     |opcode, st| {
+     |opcode, st, _| {
          let addr = st.reg_pair(RegPair::HL);
          let v = st.load(addr);
          st.set_reg(opcode.bits(5,3), v);
@@ -131,7 +137,7 @@ static ISA_DEFS: &[IsaDef] = &[
     ),
     (b"01dddsss",
      |opcode, _| Insn::Mov(opcode.bits(5,3), opcode.bits(2,0)),
-     |opcode, st| {
+     |opcode, st, _| {
          let v = st.reg(opcode.bits(2,0));
          st.set_reg(opcode.bits(5,3), v);
          st.advance(5)
@@ -139,7 +145,7 @@ static ISA_DEFS: &[IsaDef] = &[
     ),
     (b"00110110",
      |_, b| Insn::MviToM(b[0]),
-     |_, st| {
+     |_, st, _| {
          let v = st.take_imm8();
          let addr = st.reg_pair(RegPair::HL);
          st.store(addr, v);
@@ -148,7 +154,7 @@ static ISA_DEFS: &[IsaDef] = &[
     ),
     (b"00ddd110",
      |opcode, b| Insn::Mvi(opcode.bits(5,3), b[0]),
-     |opcode, st| {
+     |opcode, st, _| {
          let v = st.take_imm8();
          st.set_reg(opcode.bits(5,3), v);
          st.advance(10)
@@ -156,7 +162,7 @@ static ISA_DEFS: &[IsaDef] = &[
     ),
     (b"00pp0001",
      |opcode, b| Insn::Lxi(opcode.bits(5,4), u16_from_slice(b)),
-     |opcode, st| {
+     |opcode, st, _| {
          let v = st.take_imm16();
          st.set_reg_pair(opcode.bits(5,4), v);
          st.advance(10)
@@ -164,7 +170,7 @@ static ISA_DEFS: &[IsaDef] = &[
     ),
     (b"00101010",
      |_, b| Insn::Lhld(u16_from_slice(b)),
-     |_, st| {
+     |_, st, _| {
          let addr = st.take_imm16();
          let v = st.load16(addr);
          st.set_reg_pair(RegPair::HL, v);
@@ -173,7 +179,7 @@ static ISA_DEFS: &[IsaDef] = &[
     ),
     (b"00100010",
      |_, b| Insn::Shld(u16_from_slice(b)),
-     |_, st| {
+     |_, st, _| {
          let addr = st.take_imm16();
          let v = st.reg_pair(RegPair::HL);
          st.store16(addr, v);
@@ -182,7 +188,7 @@ static ISA_DEFS: &[IsaDef] = &[
     ),
     (b"00111010",
      |_, b| Insn::Lda(u16_from_slice(b)),
-     |_, st| {
+     |_, st, _| {
          let addr = st.take_imm16();
          let v = st.load(addr);
          st.set_reg(Reg::A, v);
@@ -191,7 +197,7 @@ static ISA_DEFS: &[IsaDef] = &[
     ),
     (b"00pp1010",
      |opcode, _| Insn::Ldax(opcode.bits(5,4)),
-     |opcode, st| {
+     |opcode, st, _| {
          let addr = st.reg_pair(opcode.bits(5,4));
          let v = st.load(addr);
          st.set_reg(Reg::A, v);
@@ -200,7 +206,7 @@ static ISA_DEFS: &[IsaDef] = &[
     ),
     (b"00110010",
      |_, b| Insn::Sta(u16_from_slice(b)),
-     |_, st| {
+     |_, st, _| {
          let addr = st.take_imm16();
          let v = st.reg(Reg::A);
          st.store(addr, v);
@@ -209,7 +215,7 @@ static ISA_DEFS: &[IsaDef] = &[
     ),
     (b"00pp0010",
      |opcode, _| Insn::Stax(opcode.bits(5,4)),
-     |opcode, st| {
+     |opcode, st, _| {
          let addr = st.reg_pair(opcode.bits(5,4));
          let v = st.reg(Reg::A);
          st.store(addr, v);
@@ -218,7 +224,7 @@ static ISA_DEFS: &[IsaDef] = &[
     ),
     (b"11101011",
      |_, _| Insn::Xchg,
-     |_, st| {
+     |_, st, _| {
          let de = st.reg_pair(RegPair::DE);
          let hl = st.reg_pair(RegPair::HL);
          st.set_reg_pair(RegPair::DE, hl);
@@ -228,7 +234,7 @@ static ISA_DEFS: &[IsaDef] = &[
     ),
     (b"11nnn111",
      |opcode, _| Insn::Rst(opcode.bits(5,3)),
-     |opcode, st| {
+     |opcode, st, _| {
          let addr = Wrapping(opcode.bits::<u16>(5,3) * 8);
          st.call(addr);
          st.advance(11)
@@ -236,7 +242,7 @@ static ISA_DEFS: &[IsaDef] = &[
     ),
     (b"11001101",
      |_, b| Insn::Call(u16_from_slice(b)),
-     |_, st| {
+     |_, st, _| {
          let addr = st.take_imm16();
          st.call(addr);
          st.advance(17)
@@ -244,7 +250,7 @@ static ISA_DEFS: &[IsaDef] = &[
     ),
     (b"11ccc100",
      |opcode, b| Insn::C(opcode.bits(5,3), u16_from_slice(b)),
-     |opcode, st| {
+     |opcode, st, _| {
          let addr = st.take_imm16();
          if st.flags.condition(opcode.bits(5,3)) {
              st.call(addr);
@@ -256,14 +262,14 @@ static ISA_DEFS: &[IsaDef] = &[
     ),
     (b"11001001",
      |_, _| Insn::Ret,
-     |_, st| {
+     |_, st, _| {
          st.ret();
          st.advance(10)
      }
     ),
     (b"11ccc000",
      |opcode, _| Insn::R(opcode.bits(5,3)),
-     |opcode, st| {
+     |opcode, st, _| {
          if st.flags.condition(opcode.bits(5,3)) {
              st.ret();
              st.advance(11)
@@ -274,7 +280,7 @@ static ISA_DEFS: &[IsaDef] = &[
     ),
     (b"11110101",
      |_, _| Insn::PushPSW,
-     |_, st| {
+     |_, st, _| {
          let psw = ((st.reg(Reg::A).0 as u16) << 8)
              | (st.flags.bits() as u16);
          st.push(Wrapping(psw));
@@ -283,7 +289,7 @@ static ISA_DEFS: &[IsaDef] = &[
     ),
     (b"11pp0101",
      |opcode, _| Insn::Push(opcode.bits(5,4)),
-     |opcode, st| {
+     |opcode, st, _| {
          let v = st.reg_pair(opcode.bits(5,4));
          st.push(v);
          st.advance(11)
@@ -292,7 +298,7 @@ static ISA_DEFS: &[IsaDef] = &[
 
     (b"11110001",
      |_, _| Insn::PopPSW,
-     |_, st| {
+     |_, st, _| {
          let psw = st.pop().0;
          st.set_reg(Reg::A, Wrapping((psw >> 8) as u8));
          st.flags.from_bits(psw as u8);
@@ -301,7 +307,7 @@ static ISA_DEFS: &[IsaDef] = &[
     ),
     (b"11pp0001",
      |opcode, _| Insn::Pop(opcode.bits(5,4)),
-     |opcode, st| {
+     |opcode, st, _| {
          let v = st.pop();
          st.set_reg_pair(opcode.bits(5,4), v);
          st.advance(10)
@@ -309,7 +315,7 @@ static ISA_DEFS: &[IsaDef] = &[
     ),
     (b"11000011",
      |_, b| Insn::Jmp(u16_from_slice(b)),
-     |_, st| {
+     |_, st, _| {
          let addr = st.take_imm16();
          st.jump(addr);
          st.advance(10)
@@ -317,7 +323,7 @@ static ISA_DEFS: &[IsaDef] = &[
     ),
     (b"11ccc010",
      |opcode, b| Insn::J(opcode.bits(5,3), u16_from_slice(b)),
-     |opcode, st| {
+     |opcode, st, _| {
          let addr = st.take_imm16();
          if st.flags.condition(opcode.bits(5,3)) {
              st.jump(addr)
@@ -328,7 +334,7 @@ static ISA_DEFS: &[IsaDef] = &[
 
     (b"00pp1001",
      |opcode, _| Insn::Dad(opcode.bits(5,4)),
-     |opcode, st| {
+     |opcode, st, _| {
          let rp = opcode.bits(5,4);
          let a = st.reg_pair(rp);
          let r32 = a.0 as u32 + st.reg_pair(RegPair::HL).0 as u32;
@@ -340,7 +346,7 @@ static ISA_DEFS: &[IsaDef] = &[
     ),
     (b"10000sss",
      |opcode, _| Insn::Add(opcode.bits(2,0)),
-     |opcode, st| {
+     |opcode, st, _| {
          let rm = opcode.bits(2,0);
          let a = st.reg(Reg::A);
          let b = st.reg_m(rm);
@@ -351,7 +357,7 @@ static ISA_DEFS: &[IsaDef] = &[
     ),
     (b"10001sss",
      |opcode, _| Insn::Adc(opcode.bits(2,0)),
-     |opcode, st| {
+     |opcode, st, _| {
          let rm = opcode.bits(2,0);
          let a = st.reg(Reg::A);
          let b = st.reg_m(rm);
@@ -363,7 +369,7 @@ static ISA_DEFS: &[IsaDef] = &[
     ),
     (b"10010sss",
      |opcode, _| Insn::Sub(opcode.bits(2,0)),
-     |opcode, st| {
+     |opcode, st, _| {
          let rm = opcode.bits(2,0);
          let a = st.reg(Reg::A);
          let b = st.reg_m(rm);
@@ -374,7 +380,7 @@ static ISA_DEFS: &[IsaDef] = &[
     ),
     (b"10011sss",
      |opcode, _| Insn::Sbb(opcode.bits(2,0)),
-     |opcode, st| {
+     |opcode, st, _| {
          let rm = opcode.bits(2,0);
          let a = st.reg(Reg::A);
          let b = st.reg_m(rm);
@@ -386,7 +392,7 @@ static ISA_DEFS: &[IsaDef] = &[
     ),
     (b"11000110",
      |_, b| Insn::Adi(b[0]),
-     |_, st| {
+     |_, st, _| {
          let a = st.reg(Reg::A);
          let b = st.take_imm8();
          let a = add(a, b, 0, &mut st.flags);
@@ -396,7 +402,7 @@ static ISA_DEFS: &[IsaDef] = &[
     ),
     (b"11001110",
      |_, b| Insn::Aci(b[0]),
-     |_, st| {
+     |_, st, _| {
          let a = st.reg(Reg::A);
          let b = st.take_imm8();
          let c = st.flags.carry as u8;
@@ -407,7 +413,7 @@ static ISA_DEFS: &[IsaDef] = &[
     ),
     (b"11010110",
      |_, b| Insn::Sui(b[0]),
-     |_, st| {
+     |_, st, _| {
          let a = st.reg(Reg::A);
          let b = st.take_imm8();
          let a = sub(a, b, 0, &mut st.flags);
@@ -417,7 +423,7 @@ static ISA_DEFS: &[IsaDef] = &[
     ),
     (b"11011110",
      |_, b| Insn::Sbi(b[0]),
-     |_, st| {
+     |_, st, _| {
          let a = st.reg(Reg::A);
          let b = st.take_imm8();
          let c = st.flags.carry as u8;
@@ -428,7 +434,7 @@ static ISA_DEFS: &[IsaDef] = &[
     ),
     (b"10100sss",
      |opcode, _| Insn::Ana(opcode.bits(2,0)),
-     |opcode, st| {
+     |opcode, st, _| {
          let rm = opcode.bits(2,0);
          let a = st.reg(Reg::A);
          let b = st.reg_m(rm);
@@ -439,7 +445,7 @@ static ISA_DEFS: &[IsaDef] = &[
     ),
     (b"11100110",
      |_, b| Insn::Ani(b[0]),
-     |_, st| {
+     |_, st, _| {
          let a = st.reg(Reg::A);
          let b = st.take_imm8();
          let a = and(a, b, &mut st.flags);
@@ -449,7 +455,7 @@ static ISA_DEFS: &[IsaDef] = &[
     ),
     (b"10110sss",
      |opcode, _| Insn::Ora(opcode.bits(2,0)),
-     |opcode, st| {
+     |opcode, st, _| {
          let rm = opcode.bits(2,0);
          let a = st.reg(Reg::A);
          let b = st.reg_m(rm);
@@ -460,7 +466,7 @@ static ISA_DEFS: &[IsaDef] = &[
     ),
     (b"11110110",
      |_, b| Insn::Ori(b[0]),
-     |_, st| {
+     |_, st, _| {
          let a = st.reg(Reg::A);
          let b = st.take_imm8();
          let a = or(a, b, &mut st.flags);
@@ -470,7 +476,7 @@ static ISA_DEFS: &[IsaDef] = &[
     ),
     (b"10101sss",
      |opcode, _| Insn::Xra(opcode.bits(2,0)),
-     |opcode, st| {
+     |opcode, st, _| {
          let rm = opcode.bits(2,0);
          let a = st.reg(Reg::A);
          let b = st.reg_m(rm);
@@ -481,7 +487,7 @@ static ISA_DEFS: &[IsaDef] = &[
     ),
     (b"11101110",
      |_, b| Insn::Xri(b[0]),
-     |_, st| {
+     |_, st, _| {
          let a = st.reg(Reg::A);
          let b = st.take_imm8();
          let a = xor(a, b, &mut st.flags);
@@ -491,7 +497,7 @@ static ISA_DEFS: &[IsaDef] = &[
     ),
     (b"10111sss",
      |opcode, _| Insn::Cmp(opcode.bits(2,0)),
-     |opcode, st| {
+     |opcode, st, _| {
          let rm = opcode.bits(2,0);
          let a = st.reg(Reg::A);
          let b = st.reg_m(rm);
@@ -501,7 +507,7 @@ static ISA_DEFS: &[IsaDef] = &[
     ),
     (b"11111110",
      |_, b| Insn::Cpi(b[0]),
-     |_, st| {
+     |_, st, _| {
          let a = st.reg(Reg::A);
          let b = st.take_imm8();
          compare(a, b, &mut st.flags);
@@ -510,7 +516,7 @@ static ISA_DEFS: &[IsaDef] = &[
     ),
     (b"00ddd100",
      |opcode, _| Insn::Inr(opcode.bits(5,3)),
-     |opcode, st| {
+     |opcode, st, _| {
         let rm = opcode.bits(5,3);
         let a = st.reg_m(rm);
         let r = inc(a, &mut st.flags);
@@ -520,7 +526,7 @@ static ISA_DEFS: &[IsaDef] = &[
     ),
     (b"00ddd101",
      |opcode, _| Insn::Dcr(opcode.bits(5,3)),
-     |opcode, st| {
+     |opcode, st, _| {
         let rm = opcode.bits(5,3);
         let a = st.reg_m(rm);
         let r = dec(a, &mut st.flags);
@@ -530,7 +536,7 @@ static ISA_DEFS: &[IsaDef] = &[
     ),
     (b"00pp0011",
      |opcode, _| Insn::Inx(opcode.bits(5,4)),
-     |opcode, st| {
+     |opcode, st, _| {
         let rp = opcode.bits(5,4);
         let a = st.reg_pair(rp);
         st.set_reg_pair(rp, a + Wrapping(1));
@@ -539,7 +545,7 @@ static ISA_DEFS: &[IsaDef] = &[
     ),
     (b"00pp1011",
      |opcode, _| Insn::Dcx(opcode.bits(5,4)),
-     |opcode, st| {
+     |opcode, st, _| {
         let rp = opcode.bits(5,4);
         let a = st.reg_pair(rp);
         st.set_reg_pair(rp, a - Wrapping(1));
@@ -548,14 +554,14 @@ static ISA_DEFS: &[IsaDef] = &[
     ),
     (b"00110111",
      |_, _| Insn::Stc,
-     |_, st| {
+     |_, st, _| {
          st.flags.carry = true;
          st.advance(4)
      },
     ),
     (b"00101111",
      |_, _| Insn::Cma,
-     |_, st| {
+     |_, st, _| {
          let a = st.reg(Reg::A);
          st.set_reg(Reg::A, !a);
          st.advance(4)
@@ -563,7 +569,7 @@ static ISA_DEFS: &[IsaDef] = &[
     ),
     (b"00111111",
      |_, _| Insn::Cmc,
-     |_, st| {
+     |_, st, _| {
          let c = st.flags.carry;
          st.flags.carry = !c;
          st.advance(4)
@@ -571,7 +577,7 @@ static ISA_DEFS: &[IsaDef] = &[
     ),
     (b"00000111",
      |_, _| Insn::Rlc,
-     |_, st| {
+     |_, st, _| {
          let a = st.reg(Reg::A);
          let r = (a << 1) | (a >> 7);
 
@@ -583,7 +589,7 @@ static ISA_DEFS: &[IsaDef] = &[
     ),
     (b"00010111",
      |_, _| Insn::Ral,
-     |_, st| {
+     |_, st, _| {
          let a = st.reg(Reg::A);
          let r = (a << 1) | Wrapping(st.flags.carry as u8);
 
@@ -595,7 +601,7 @@ static ISA_DEFS: &[IsaDef] = &[
     ),
     (b"00001111",
      |_, _| Insn::Rrc,
-     |_, st| {
+     |_, st, _| {
          let a = st.reg(Reg::A);
          let r = (a >> 1) | (a << 7);
 
@@ -607,7 +613,7 @@ static ISA_DEFS: &[IsaDef] = &[
     ),
     (b"00011111",
      |_, _| Insn::Rar,
-     |_, st| {
+     |_, st, _| {
          let a = st.reg(Reg::A);
          let r = (a >> 1) | Wrapping((st.flags.carry as u8) << 7);
 
@@ -619,7 +625,7 @@ static ISA_DEFS: &[IsaDef] = &[
     ),
     (b"00100111",
      |_, _| Insn::Daa,
-     |_, st| {
+     |_, st, _| {
          // back up carry flag.
          let mut carry = st.flags.carry;
          let a = st.reg(Reg::A);
@@ -641,7 +647,7 @@ static ISA_DEFS: &[IsaDef] = &[
     ),
     (b"11100011",
      |_, _| Insn::Xthl,
-     |_, st| {
+     |_, st, _| {
          let hl = st.reg_pair(RegPair::HL);
          let tmp = st.pop();
          st.push(hl);
@@ -651,7 +657,7 @@ static ISA_DEFS: &[IsaDef] = &[
     ),
     (b"11111001",
      |_, _| Insn::Sphl,
-     |_, st| {
+     |_, st, _| {
          let hl = st.reg_pair(RegPair::HL);
          st.set_reg_pair(RegPair::SP, hl);
          st.advance(5)
@@ -659,7 +665,7 @@ static ISA_DEFS: &[IsaDef] = &[
     ),
     (b"11101001",
      |_, _| Insn::Pchl,
-     |_, st| {
+     |_, st, _| {
          let hl = st.reg_pair(RegPair::HL);
          st.jump(hl);
          st.advance(5)
@@ -667,21 +673,39 @@ static ISA_DEFS: &[IsaDef] = &[
     ),
     (b"11111011",
      |_, _| Insn::Ei,
-     |_, st| {
+     |_, st, _| {
          st.set_interrupt_flag(true);
          st.advance(4)
      },
     ),
     (b"11110011",
      |_, _| Insn::Di,
-     |_, st| {
+     |_, st, _| {
          st.set_interrupt_flag(false);
          st.advance(4)
      },
     ),
+    (b"11011011",
+     |_, b| Insn::In(b[0]),
+     |_, st, ctx| {
+         let p = st.take_imm8();
+         let v = ctx.io.read_port(p.0);
+         st.set_reg(Reg::A, Wrapping(v));
+         st.advance(10)
+     },
+    ),
+    (b"11010011",
+     |_, b| Insn::Out(b[0]),
+     |_, st, ctx| {
+         let p = st.take_imm8();
+         let v = st.reg(Reg::A);
+         ctx.io.write_port(p.0, v.0);
+         st.advance(10)
+     },
+    ),
     (b"00___000",
      |_, _| Insn::Nop,
-     |_, st| {
+     |_, st, _| {
          st.advance(4)
      },
     ),
@@ -732,7 +756,7 @@ impl ::std::cmp::PartialOrd for Pat {
 }
 
 lazy_static! {
-    pub static ref DISPATCH: [Option<fn(Opcode, &mut Emu)>; 256] = {
+    pub static ref DISPATCH: [Option<DispatchFn>; 256] = {
         let mut table = [None; 256];
 
         // Collect all the dispatch functions and sort them by pattern

@@ -285,3 +285,13 @@ impl Emu {
         self.pc.0
     }
 }
+
+pub trait Ports {
+    fn write_port(&mut self, port: u8, val: u8);
+    fn read_port(&mut self, port: u8) -> u8;
+}
+
+impl Ports for () {
+    fn write_port(&mut self, _: u8, _: u8) {}
+    fn read_port(&mut self, _: u8) -> u8 { 0 }
+}
