@@ -1,0 +1,261 @@
+//! Emulated debug monitor.
+
+use std::io::{self, prelude::*};
+use std::collections::HashMap;
+use std::fs;
+use std::num::Wrapping;
+
+use super::isa::{Reg, RegPair, Opcode};
+use super::emu;
+use super::dis;
+use super::ops;
+
+/// State of the monitor, including the machine under test.
+#[derive(Clone, Debug)]
+pub struct Mon {
+    /// Machine under test.
+    machine: emu::Emu,
+    /// Addresses with breakpoints. This helps distinguish a monitor-induced HLT
+    /// from an actual HLT in the program.
+    breakpoints: HashMap<u16, Breakpoint>,
+}
+
+impl Default for Mon {
+    fn default() -> Self {
+        Mon {
+            machine: emu::Emu::default(),
+            breakpoints: HashMap::default(),
+        }
+    }
+}
+
+/// Information tracked for each breakpoint.
+#[derive(Copy, Clone, Debug)]
+struct Breakpoint {
+    /// Byte that was removed from the program to create this breakpoint.
+    orig: u8,
+}
+
+const HLT: u8 = 76;
+
+impl Mon {
+    pub fn run(&mut self) -> io::Result<()> {
+        let out = io::stdout();
+        let mut out = out.lock();
+
+        let inp = io::stdin();
+        let mut inp = inp.lock();
+
+        write!(&mut out, "8080 Debug Monitor: starting.\n")?;
+
+        let mut cmd = String::new();
+
+        loop {
+            cmd.clear();
+            self.print_info(&mut out)?;
+            write!(&mut out, "> ")?;
+            out.flush()?;
+            let n = inp.read_line(&mut cmd)?;
+            if n == 0 { return Ok(()) }
+            
+            let words: Vec<_> = cmd.split_whitespace().collect();
+            if words.is_empty() { continue }
+
+            match words[0] {
+                "d" => self.disassemble(&mut out)?,
+                "l" => if words.len() == 3 {
+                    self.load_file(words[1], words[2], &mut out)?;
+                } else {
+                    write!(&mut out, "Usage: l <filename> <addr>\n")?
+                },
+                "r" => if words.len() == 3 {
+                    self.set_reg(words[1], words[2], &mut out)?;
+                } else {
+                    write!(&mut out, "Usage: r <reg> <val>\n")?
+                },
+                "j" => if words.len() == 2 {
+                    self.jump(words[1], &mut out)?
+                } else {
+                    write!(&mut out, "Usage: j <addr>\n")?
+                },
+                "s" => self.step(&mut out)?,
+                "g" => self.go(&mut out)?,
+                _ => write!(&mut out, "what\n")?,
+            }
+        }
+    }
+
+    fn print_info(&self, out: &mut impl Write) -> io::Result<()> {
+        write!(out, " A  B  C  D  E  H  L   SP   PC FLAGS\n")?;
+        write!(out, "{:02X} {:02X} {:02X} {:02X} {:02X} {:02X} {:02X} \
+                     {:04X} {:04X} {}{}{}{}{}\n",
+               self.machine.reg(Reg::A),
+               self.machine.reg(Reg::B),
+               self.machine.reg(Reg::C),
+               self.machine.reg(Reg::D),
+               self.machine.reg(Reg::E),
+               self.machine.reg(Reg::H),
+               self.machine.reg(Reg::L),
+               self.machine.reg_pair(RegPair::SP),
+               self.machine.get_pc(),
+               if self.machine.flags.carry  { 'C' } else { '-' },
+               if self.machine.flags.parity { 'P' } else { '-' },
+               if self.machine.flags.aux    { 'A' } else { '-' },
+               if self.machine.flags.zero   { 'Z' } else { '-' },
+               if self.machine.flags.sign   { 'S' } else { '-' })
+    }
+    
+    fn disassemble(&self, out: &mut impl Write) -> io::Result<()> {
+        let mut addr = self.machine.get_pc() as usize;
+        let final_addr = addr + 16;
+        let mut bytes = self.machine.mem.iter()
+            .map(|&b| Ok(b))
+            .cycle().skip(addr as usize);
+        while addr < final_addr {
+            write!(out, "\t{:02X}\t", addr)?;
+            addr += dis::disassemble(&mut bytes, out)?;
+            write!(out, "\n")?;
+        }
+        Ok(())
+    }
+
+    fn load_file(&mut self,
+                 filename: &str,
+                 addr: &str,
+                 out: &mut impl Write) -> io::Result<()> {
+        let addr = match u16::from_str_radix(addr, 16) {
+            Err(e) => {
+                return write!(out, "Bad address: {:?} {:?}", addr, e)
+            },
+            Ok(a) => a,
+        };
+
+        let mut f = fs::File::open(filename)?;
+        let meta = f.metadata()?;
+        if meta.len() > 0x10000 || (meta.len() + (addr as u64)) > 0x10000 {
+            return write!(out, "Cannot load {}-byte file to address {:04X}",
+                          meta.len(), addr)
+        }
+
+        let addr = addr as usize;
+        let last_addr = addr + meta.len() as usize;
+        f.read_exact(&mut self.machine.mem[addr .. last_addr])
+    }
+
+    fn set_reg(&mut self,
+               name: &str,
+               val: &str,
+               out: &mut impl Write) -> io::Result<()> {
+        match name {
+            "a" | "A" => self.set_reg8(Reg::A, val, out),
+            "b" | "B" => self.set_reg8(Reg::B, val, out),
+            "c" | "C" => self.set_reg8(Reg::C, val, out),
+            "d" | "D" => self.set_reg8(Reg::D, val, out),
+            "e" | "E" => self.set_reg8(Reg::E, val, out),
+            "h" | "H" => self.set_reg8(Reg::H, val, out),
+            "l" | "L" => self.set_reg8(Reg::L, val, out),
+
+            "bc" | "BC" => self.set_reg_pair(RegPair::BC, val, out),
+            "de" | "DE" => self.set_reg_pair(RegPair::DE, val, out),
+            "hl" | "HL" => self.set_reg_pair(RegPair::HL, val, out),
+            "sp" | "SP" => self.set_reg_pair(RegPair::SP, val, out),
+
+            _ => write!(out, "Bad register name: {}", name),
+        }
+    }
+
+    fn set_reg8(&mut self,
+                reg: Reg,
+                val: &str,
+                out: &mut impl Write) -> io::Result<()> {
+        let val = match u8::from_str_radix(val, 16) {
+            Err(e) => {
+                return write!(out, "Bad 8-bit value: {:?} {:?}", val, e)
+            },
+            Ok(a) => a,
+        };
+        self.machine.set_reg(reg, Wrapping(val));
+        Ok(())
+    }
+
+    fn set_reg_pair(&mut self,
+                    reg: RegPair,
+                    val: &str,
+                    out: &mut impl Write) -> io::Result<()> {
+        let val = match u16::from_str_radix(val, 16) {
+            Err(e) => {
+                return write!(out, "Bad 16-bit value: {:?} {:?}", val, e)
+            },
+            Ok(a) => a,
+        };
+        self.machine.set_reg_pair(reg, Wrapping(val));
+        Ok(())
+    }
+
+    fn jump(&mut self,
+            addr: &str,
+            out: &mut impl Write) -> io::Result<()> {
+        let addr = match u16::from_str_radix(addr, 16) {
+            Err(e) => {
+                return write!(out, "Bad address: {:?} {:?}", addr, e)
+            },
+            Ok(a) => a,
+        };
+        self.machine.jump(Wrapping(addr));
+        Ok(())
+    }
+
+    fn install_breakpoints(&mut self) {
+        for (addr, bp) in self.breakpoints.iter_mut() {
+            let addr = *addr as usize;
+            bp.orig = self.machine.mem[addr];
+            self.machine.mem[addr] = HLT;
+        }
+    }
+
+    fn remove_breakpoints(&mut self) {
+        for (addr, bp) in self.breakpoints.iter_mut() {
+            let addr = *addr as usize;
+            self.machine.mem[addr] = bp.orig;
+        }
+    }
+
+    fn go(&mut self,
+          out: &mut impl Write) -> io::Result<()> {
+        self.install_breakpoints();
+        let r = emu::run(&mut self.machine);
+        self.remove_breakpoints();
+        match r {
+            Ok((last_pc, pc)) => {
+                if let Some(bp) = self.breakpoints.remove(&pc) {
+                    write!(out, "Breakpoint @{:04X}, last PC = {:04X}\n",
+                           pc, last_pc)
+                } else {
+                    write!(out, "HLT @{:04X}, last PC = {:04X}\n",
+                           pc, last_pc)
+                }
+            },
+            Err(emu::RunError::UnimplementedInstruction(op, addr)) =>
+                write!(out, "UNIMPLEMENTED {:02X} @{:04X}\n", op, addr),
+        }
+    }
+
+    fn step(&mut self,
+            out: &mut impl Write) -> io::Result<()> {
+        let pc = self.machine.get_pc();
+        self.install_breakpoints();
+        let r = emu::step(&mut self.machine);
+        self.remove_breakpoints();
+        match r {
+            Ok(true) => {
+                if let Some(bp) = self.breakpoints.remove(&pc) {
+                    write!(out, "Breakpoint @{:04X}\n", pc)?
+                }
+                Ok(())
+            },
+            Ok(false) => Ok(()),
+            Err(emu::RunError::UnimplementedInstruction(op, addr)) =>
+                write!(out, "UNIMPLEMENTED {:02X} @{:04X}\n", op, addr),
+        }
+    }
+}
