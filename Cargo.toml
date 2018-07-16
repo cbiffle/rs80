@@ -6,6 +6,7 @@ authors = ["Cliff L. Biffle <code@cliffle.com>"]
 [dependencies]
 time = "0.1.40"
 lazy_static = "1.0"
+clap = "2.32"
 
 [profile.release]
 debug = true
