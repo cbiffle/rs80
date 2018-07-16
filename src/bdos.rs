@@ -42,7 +42,7 @@ pub fn run_bdos<W>(emu: &mut Emu,
     emu.memory_mut()[5 + 1] = 0xC9;
 
     loop {
-        match run(emu) {
+        match run(emu, &mut ()) {
             Err(e) => return Err(BdosError::RunError(e)),
             Ok((last_pc, halt_addr)) => {
                 match halt_addr {
