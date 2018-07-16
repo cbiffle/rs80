@@ -93,33 +93,44 @@ pub fn disassemble(bytes: &mut impl Iterator<Item = io::Result<u8>>,
         Some(op) => op?,
     };
 
-    let mut n = 1;
+    let mut used = vec![opcode];
+    let mut buf = io::Cursor::new(vec![]);
     match table[opcode as usize] {
-        None => write!(out, "DB {:02X}", opcode)?,
+        None => write!(&mut buf, "DB\t{:02X}", opcode)?,
         Some(f) => {
             let insn = f(Opcode(opcode));
             if let Some(cc) = insn.mnemonic.cc {
-                write!(out, "{}{:?}", insn.mnemonic.label, cc)?;
+                write!(&mut buf, "{}{:?}", insn.mnemonic.label, cc)?;
             } else {
-                write!(out, "{}", insn.mnemonic.label)?;
+                write!(&mut buf, "{}", insn.mnemonic.label)?;
             }
             if let Some(a) = insn.a {
-                write!(out, "\t")?;
-                n += print_operand(a, bytes, out)?;
+                write!(&mut buf, "\t")?;
+                print_operand(a, bytes, &mut used, &mut buf)?;
                 if let Some(b) = insn.b {
-                    write!(out, ",")?;
-                    n += print_operand(b, bytes, out)?;
+                    write!(&mut buf, ",")?;
+                    print_operand(b, bytes, &mut used, &mut buf)?;
                 }
             }
         },
     }
 
-    Ok(n)
+    let text = String::from_utf8(buf.into_inner()).unwrap();
+    for b in &used {
+        write!(out, "{:02X} ", b)?;
+    }
+    for _ in used.len() .. 3 {
+        write!(out, "   ")?;
+    }
+    write!(out, "\t{}", text)?;
+
+    Ok(used.len())
 }
 
 fn print_operand(op: Operand,
                  f: &mut impl Iterator<Item=io::Result<u8>>,
-                 out: &mut impl Write) -> io::Result<usize>
+                 used: &mut Vec<u8>,
+                 out: &mut impl Write) -> io::Result<()>
 {
     match op {
         Operand::RM(RegM::R(r)) => write!(out, "{:?}", r)?,
@@ -128,23 +139,25 @@ fn print_operand(op: Operand,
         Operand::PSW => write!(out, "PSW")?,
         Operand::C3(c) => write!(out, "{:02X}H", c * 8)?,
         Operand::I8 | Operand::Port8 => if let Some(i) = f.next() {
-            write!(out, "{:02X}H", i?)?;
-            return Ok(1)
+            let i = i?;
+            used.push(i);
+            write!(out, "{:02X}H", i)?;
         } else {
             write!(out, "???")?;
-            return Ok(0)
         },
         Operand::I16 | Operand::Addr => if let Some(lo) = f.next() {
+            let lo = lo?;
+            used.push(lo);
             if let Some(hi) = f.next() {
-                write!(out, "{:04X}H", (hi? as u16) << 8 | (lo? as u16))?;
-                return Ok(2)
+                let hi = hi?;
+                used.push(hi);
+                write!(out, "{:04X}H", (hi as u16) << 8 | (lo as u16))?;
             } else {
                 write!(out, "???")?;
-                return Ok(1)
             }
         } else {
             write!(out, "???")?
         },
     }
-    return Ok(0)
+    Ok(())
 }
