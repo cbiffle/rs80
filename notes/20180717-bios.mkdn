@@ -1,0 +1,134 @@
+For the console, let's assume that the host has infinite buffering, so output
+always succeeds. Input, however, may block.
+
+Console device ports:
+    10h   Reads as console status.
+    11h   Reads data from console, writes data to console.
+
+
+    ; Check if character is waiting on the console. Return 0 (no) or FF (yes).
+    CONST   IN 10h        ; Read console status into A.
+            RET
+
+    ; Read the next character from the console, blocking if necessary.
+    CONIN   IN 10h        ; Check status.
+            ORI 00h       ; Set flags.
+            JZ CONIN      ; Repeat until non-zero.
+            IN 11h        ; Read character into A.
+            RET
+
+    CONOUT  MOV A, C      ; Move character to accumulator.
+            OUT 11h       ; Send character to console.
+            RET
+
+
+For the disk, we'll leave the disk geometry unspecified and have the host
+deliver it through a port. This seems like the most flexible choice.
+
+We'll assume that sector translation is a no-op (no skew or interleaving for
+simplicity).
+
+Disk device ports:
+
+  20h     Write: Disk select in low nibble
+  21h     Read: cycles through bytes of the DPH for the selected disk.
+  22h     Low byte of track number
+  23h     High byte
+  24h     Low byte of sector number
+  25h     High byte
+
+
+    HOME    PUSH BC
+            LXI BC, 0h
+            JMP SETTRK
+
+    ; Disk device number in C.
+    ; Initialization flag in E: LSB clear if this device is new to BDOS.
+    SELDSK  MOV A, C
+            OUT 20h       ; Notify host which drive we're using now.
+
+            PUSH BC
+
+            ADD A         ; multiply
+            ADD A         ; disk number
+            ADD A         ; by
+            ADD A         ; 16
+            MOV C, A      ; and move back to C.
+
+            XRA A         ; Clear accumulator, and
+            MOV B, A      ; clear B. BC now contains DPH offset in bytes.
+            LXI HL, DPHTABLE
+            DAD BC        ; Compute DPH address.
+
+            POP BC
+
+            MOV A, E      ; Obtain the initialization parameter,
+            RRC           ; Move LSB into C flag.
+            RC            ; If set, we're all done.
+
+            ; This is the first time this disk has been selected. We need to
+            ; initialize the DPH (address in HL already).
+            PUSH HL
+            MVI E, 16     ; Loading 16 bytes.
+         0: IN 21h        ; Read DPH byte from host.
+            MOV M, A      ; Write it to (HL)
+            INX HL        ; Advance HL
+            DEC E         ; Decrement count.
+            JNZ 0b        ; Repeat until zero.
+            POP HL        ; Restore DPH base address.
+            RET
+
+    ; Track number in BC
+    SETTRK  MOV A, C
+            OUT 22h       ; Send low byte of track number to host
+            MOV A, B
+            OUT 23h       ; And high byte
+            RET
+    
+    SETSEC  MOV A, C
+            OUT 24h       ; Low byte of sector number
+            MOV A, B
+            OUT 25h       ; High byte.
+            RET
+
+    SETDMA  PUSH HL
+            LXI HL, DMAADDR
+            STAX BC
+            POP HL
+            RET
+
+    DMAADDR DW 0
+
+    READ    PUSH HL         ; Save registers.
+            PUSH BC
+            LHLD DMAADDR    ; Read previously set DMA address.
+            MVI C, 128
+
+         0: IN 26h          ; Read next byte.
+            MOV M, A        ; Write it to (HL).
+            INX HL          ; Advance.
+            DEC C
+            JNZ 0b          ; Repeat until zero.
+
+            POP BC          ; Restore and return.
+            POP HL
+            RET
+
+    WRITE   PUSH HL         ; Save registers.
+            PUSH BC
+            LHLD DMAADDR    ; Read previously set DMA address.
+            MVI C, 128
+
+         0: MOV A, M        ; Read (HL).
+            OUT 26h         ; Write to disk.
+            INX HL          ; Advance.
+            DEC C
+            JNZ 0b          ; Repeat until zero.
+
+            POP BC          ; Restore and return.
+            POP HL
+            RET
+            
+    SECTRAN MOV H, B        ; Return sector number unchanged.
+            MOV L, C
+            RET
