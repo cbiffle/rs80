@@ -144,4 +144,8 @@ impl Opcode {
     pub fn rp(self, hi: u32, lo: u32) -> RegPair {
         self.bits(hi, lo)
     }
+
+    pub fn bit(self, idx: u32) -> bool {
+        (self.0 >> idx) & 1 != 0
+    }
 }

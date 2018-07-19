@@ -93,6 +93,55 @@ fn sub(a: W8, b: W8, c: u8, flags: &mut Flags) -> W8 {
     Wrapping(sum8)
 }
 
+fn addsub_template_r(opcode: Opcode,
+                     st: &mut Emu,
+                     f: impl FnOnce(W8, W8, u8, &mut Flags) -> W8) -> bool {
+    let rm = opcode.bits(2,0);
+    let a = st.reg(Reg::A);
+    let b = st.reg_m(rm);
+    let c = match opcode.bit(3) {
+        false => 0,
+        _     => st.flags.carry as u8,
+    };
+    let a = f(a, b, c, &mut st.flags);
+    st.set_reg(Reg::A, a);
+    st.advance(rm.reg_or_m(4, 7))
+}
+
+fn addsub_template_i(opcode: Opcode,
+                     st: &mut Emu,
+                     f: impl FnOnce(W8, W8, u8, &mut Flags) -> W8) -> bool {
+    let a = st.reg(Reg::A);
+    let b = st.take_imm8();
+    let c = match opcode.bit(3) {
+        false => 0,
+        _     => st.flags.carry as u8,
+    };
+    let a = f(a, b, c, &mut st.flags);
+    st.set_reg(Reg::A, a);
+    st.advance(7)
+}
+
+fn logic_template_r(opcode: Opcode,
+                    st: &mut Emu,
+                    f: impl FnOnce(W8, W8, &mut Flags) -> W8) -> bool {
+    let rm = opcode.bits(2,0);
+    let a = st.reg(Reg::A);
+    let b = st.reg_m(rm);
+    let a = f(a, b, &mut st.flags);
+    st.set_reg(Reg::A, a);
+    st.advance(rm.reg_or_m(4, 7))
+}
+
+fn logic_template_i(st: &mut Emu,
+                    f: impl FnOnce(W8, W8, &mut Flags) -> W8) -> bool {
+    let a = st.reg(Reg::A);
+    let b = st.take_imm8();
+    let a = f(a, b, &mut st.flags);
+    st.set_reg(Reg::A, a);
+    st.advance(7)
+}
+
 fn compare(a: W8, b: W8, flags: &mut Flags) {
     sub(a, b, 0, flags);
 }
@@ -140,20 +189,11 @@ static ISA_DEFS: &[IsaDef] = &[
          st.advance(5)
      }
     ),
-    (b"00110110",
-     |opcode| InsnInfo::binary("MVI", opcode.regm(5,3), Operand::I8),
-     |_, st, _| {
-         let v = st.take_imm8();
-         let addr = st.reg_pair(RegPair::HL);
-         st.store(addr, v);
-         st.advance(10)
-     }
-    ),
     (b"00ddd110",
      |opcode| InsnInfo::binary("MVI", opcode.regm(5,3), Operand::I8),
      |opcode, st, _| {
          let v = st.take_imm8();
-         st.set_reg(opcode.bits(5,3), v);
+         st.set_reg_m(opcode.bits(5,3), v);
          st.advance(10)
      }
     ),
@@ -341,156 +381,58 @@ static ISA_DEFS: &[IsaDef] = &[
          st.advance(10)
      },
     ),
-    (b"10000sss",
-     |opcode| InsnInfo::unary("ADD", opcode.regm(2,0)),
-     |opcode, st, _| {
-         let rm = opcode.bits(2,0);
-         let a = st.reg(Reg::A);
-         let b = st.reg_m(rm);
-         let a = add(a, b, 0, &mut st.flags);
-         st.set_reg(Reg::A, a);
-         st.advance(rm.reg_or_m(4,7))
+    (b"1000csss",
+     |opcode| match opcode.bit(3) {
+         false => InsnInfo::unary("ADD", opcode.regm(2,0)),
+         _     => InsnInfo::unary("ADC", opcode.regm(2,0)),
      },
+     |opcode, st, _| addsub_template_r(opcode, st, add),
     ),
-    (b"10001sss",
-     |opcode| InsnInfo::unary("ADC", opcode.regm(2,0)),
-     |opcode, st, _| {
-         let rm = opcode.bits(2,0);
-         let a = st.reg(Reg::A);
-         let b = st.reg_m(rm);
-         let c = st.flags.carry as u8;
-         let a = add(a, b, c, &mut st.flags);
-         st.set_reg(Reg::A, a);
-         st.advance(rm.reg_or_m(4, 7))
+    (b"1001csss",
+     |opcode| match opcode.bit(3) {
+         false => InsnInfo::unary("SUB", opcode.regm(2,0)),
+         _     => InsnInfo::unary("SBB", opcode.regm(2,0)),
      },
+     |opcode, st, _| addsub_template_r(opcode, st, sub),
     ),
-    (b"10010sss",
-     |opcode| InsnInfo::unary("SUB", opcode.regm(2,0)),
-     |opcode, st, _| {
-         let rm = opcode.bits(2,0);
-         let a = st.reg(Reg::A);
-         let b = st.reg_m(rm);
-         let a = sub(a, b, 0, &mut st.flags);
-         st.set_reg(Reg::A, a);
-         st.advance(rm.reg_or_m(4, 7))
+
+    (b"1100c110",
+     |opcode| match opcode.bit(3) {
+         false => InsnInfo::unary("ADI", Operand::I8),
+         _     => InsnInfo::unary("ACI", Operand::I8),
      },
+     |opcode, st, _| addsub_template_i(opcode, st, add),
     ),
-    (b"10011sss",
-     |opcode| InsnInfo::unary("SBB", opcode.regm(2,0)),
-     |opcode, st, _| {
-         let rm = opcode.bits(2,0);
-         let a = st.reg(Reg::A);
-         let b = st.reg_m(rm);
-         let c = st.flags.carry as u8;
-         let a = sub(a, b, c, &mut st.flags);
-         st.set_reg(Reg::A, a);
-         st.advance(rm.reg_or_m(4, 7))
+    (b"1101c110",
+     |opcode| match opcode.bit(3) {
+         false => InsnInfo::unary("SUI", Operand::I8),
+         _     => InsnInfo::unary("SBI", Operand::I8),
      },
-    ),
-    (b"11000110",
-     |_| InsnInfo::unary("ADI", Operand::I8),
-     |_, st, _| {
-         let a = st.reg(Reg::A);
-         let b = st.take_imm8();
-         let a = add(a, b, 0, &mut st.flags);
-         st.set_reg(Reg::A, a);
-         st.advance(7)
-     },
-    ),
-    (b"11001110",
-     |_| InsnInfo::unary("ACI", Operand::I8),
-     |_, st, _| {
-         let a = st.reg(Reg::A);
-         let b = st.take_imm8();
-         let c = st.flags.carry as u8;
-         let a = add(a, b, c, &mut st.flags);
-         st.set_reg(Reg::A, a);
-         st.advance(7)
-     },
-    ),
-    (b"11010110",
-     |_| InsnInfo::unary("SUI", Operand::I8),
-     |_, st, _| {
-         let a = st.reg(Reg::A);
-         let b = st.take_imm8();
-         let a = sub(a, b, 0, &mut st.flags);
-         st.set_reg(Reg::A, a);
-         st.advance(7)
-     },
-    ),
-    (b"11011110",
-     |_| InsnInfo::unary("SBI", Operand::I8),
-     |_, st, _| {
-         let a = st.reg(Reg::A);
-         let b = st.take_imm8();
-         let c = st.flags.carry as u8;
-         let a = sub(a, b, c, &mut st.flags);
-         st.set_reg(Reg::A, a);
-         st.advance(7)
-     },
+     |opcode, st, _| addsub_template_i(opcode, st, sub),
     ),
     (b"10100sss",
      |opcode| InsnInfo::unary("ANA", opcode.regm(2,0)),
-     |opcode, st, _| {
-         let rm = opcode.bits(2,0);
-         let a = st.reg(Reg::A);
-         let b = st.reg_m(rm);
-         let a = and(a, b, &mut st.flags);
-         st.set_reg(Reg::A, a);
-         st.advance(rm.reg_or_m(4, 7))
-     },
+     |opcode, st, _| logic_template_r(opcode, st, and),
     ),
     (b"11100110",
      |_| InsnInfo::unary("ANI", Operand::I8),
-     |_, st, _| {
-         let a = st.reg(Reg::A);
-         let b = st.take_imm8();
-         let a = and(a, b, &mut st.flags);
-         st.set_reg(Reg::A, a);
-         st.advance(7)
-     },
+     |_, st, _| logic_template_i(st, and),
     ),
     (b"10110sss",
      |opcode| InsnInfo::unary("ORA", opcode.regm(2,0)),
-     |opcode, st, _| {
-         let rm = opcode.bits(2,0);
-         let a = st.reg(Reg::A);
-         let b = st.reg_m(rm);
-         let a = or(a, b, &mut st.flags);
-         st.set_reg(Reg::A, a);
-         st.advance(rm.reg_or_m(4, 7))
-     },
+     |opcode, st, _| logic_template_r(opcode, st, or),
     ),
     (b"11110110",
      |_| InsnInfo::unary("ORI", Operand::I8),
-     |_, st, _| {
-         let a = st.reg(Reg::A);
-         let b = st.take_imm8();
-         let a = or(a, b, &mut st.flags);
-         st.set_reg(Reg::A, a);
-         st.advance(7)
-     },
+     |_, st, _| logic_template_i(st, or),
     ),
     (b"10101sss",
      |opcode| InsnInfo::unary("XRA", opcode.regm(2,0)),
-     |opcode, st, _| {
-         let rm = opcode.bits(2,0);
-         let a = st.reg(Reg::A);
-         let b = st.reg_m(rm);
-         let a = xor(a, b, &mut st.flags);
-         st.set_reg(Reg::A, a);
-         st.advance(rm.reg_or_m(4, 7))
-     },
+     |opcode, st, _| logic_template_r(opcode, st, xor),
     ),
     (b"11101110",
      |_| InsnInfo::unary("XRI", Operand::I8),
-     |_, st, _| {
-         let a = st.reg(Reg::A);
-         let b = st.take_imm8();
-         let a = xor(a, b, &mut st.flags);
-         st.set_reg(Reg::A, a);
-         st.advance(7)
-     },
+     |_, st, _| logic_template_i(st, xor),
     ),
     (b"10111sss",
      |opcode| InsnInfo::unary("CMP", opcode.regm(2,0)),
