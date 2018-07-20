@@ -75,7 +75,7 @@ pub type W8 = Wrapping<u8>;
 pub type W16 = Wrapping<u16>;
 
 /// Emulator state.
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct Emu {
     /// 8-bit registers in encoding order, with placeholder at index 6.
     registers: [W8; 8],
@@ -85,8 +85,8 @@ pub struct Emu {
     sp: W16,
     /// Program counter.
     pc: W16,
-    /// Memory image. You can't tell from the type, but this is 64kiB.
-    pub mem: Vec<u8>,
+    /// Memory image.
+    pub mem: [u8; 65536],
     /// Cycle counter, increments for every 8080 cycle (*not* every emulated
     /// instruction).
     pub cycles: usize,
@@ -104,7 +104,7 @@ impl Default for Emu {
             registers: [Wrapping(0); 8],
             sp: Wrapping(0),
             pc: Wrapping(0),
-            mem: vec![0; 0x1_0000],
+            mem: [0; 0x1_0000],
             cycles: 0,
             interrupts: false,
             flags: Flags::default(),

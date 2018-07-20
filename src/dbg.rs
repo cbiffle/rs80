@@ -10,7 +10,7 @@ use super::emu;
 use super::dis;
 
 /// State of the monitor, including the machine under test.
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct Mon {
     /// Machine under test.
     machine: emu::Emu,
