@@ -2,7 +2,6 @@
 
 use std::io::{self, Read};
 use std::fs;
-use std::num::Wrapping;
 
 use super::isa::{RegPair, Reg};
 use super::emu::{Emu, run, RunError};
@@ -31,8 +30,8 @@ pub fn run_bdos<W>(emu: &mut Emu,
     where W: io::Write
 {
     // Start at 0x100 like CP/M.
-    emu.jump(Wrapping(0x100));
-    emu.set_reg_pair(RegPair::SP, Wrapping(0));
+    emu.jump(0x100);
+    emu.set_reg_pair(RegPair::SP, 0);
     // Fill low memory with HLTs
     for i in 0..0x100 {
         emu.memory_mut()[i] = 0x76;
@@ -48,26 +47,26 @@ pub fn run_bdos<W>(emu: &mut Emu,
                 match halt_addr {
                     5 => {
                         // CP/M syscall restart address
-                        match emu.reg(Reg::C).0 {
+                        match emu.reg(Reg::C) {
                             9 => {
                                 // Type string
                                 let mut addr = emu.reg_pair(RegPair::DE);
                                 loop {
-                                    let c = emu.load(addr).0;
+                                    let c = emu.load(addr);
                                     if c == b'$' { break }
                                     out.write(&[c])
                                         .map_err(BdosError::Out)?;
-                                    addr += Wrapping(1);
+                                    addr = addr.wrapping_add(1);
                                 }
                             },
                             2 => {
                                 // Put character
-                                let c = emu.reg(Reg::E).0;
+                                let c = emu.reg(Reg::E);
                                 out.write(&[c])
                                     .map_err(BdosError::Out)?;
                             },
                             _ => return Err(BdosError::UnhandledBdosCall(
-                                    emu.reg(Reg::C).0, last_pc)),
+                                    emu.reg(Reg::C), last_pc)),
                         }
                     },
                     0 => {

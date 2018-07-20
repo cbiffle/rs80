@@ -1,101 +1,99 @@
-use std::num::Wrapping;
 
 use super::isa::{Opcode, Reg, RegPair};
 use super::dis::{InsnInfo, Operand};
-use super::emu::{Emu, Flags, W8, Ports};
+use super::emu::{Emu, Flags, Ports};
 
 ////////////////////////////////////////////////////////////////////////////////
 
-fn add(a: W8, b: W8, c: u8, flags: &mut Flags) -> W8 {
-    let sum16 = a.0 as u16 + b.0 as u16 + c as u16;
+fn add(a: u8, b: u8, c: u8, flags: &mut Flags) -> u8 {
+    // This addition can't overflow because of the zero-extension.
+    let sum16 = a as u16 + b as u16 + c as u16;
    
-    let sum8 = sum16 as u8;
+    let sum8 = sum16 as u8; // may get truncated here though, and that's OK
     flags.zero = sum8 == 0;
     flags.carry = sum16 & 0x100 != 0;
     flags.sign = sum8 & 0x80 != 0;
-    flags.aux = ((a.0 & 0xF) + (b.0 & 0xF) + c) & 0x10 != 0;
+    flags.aux = ((a & 0xF) + (b & 0xF) + c) & 0x10 != 0;
     flags.parity = sum8.count_ones() % 2 == 0;
 
-    Wrapping(sum8)
+    sum8
 }
 
-fn inc(a: W8, flags: &mut Flags) -> W8 {
-    let sum = a + Wrapping(1);
+fn inc(a: u8, flags: &mut Flags) -> u8 {
+    let sum = a.wrapping_add(1);
    
-    flags.zero   = sum.0 == 0;
-    flags.aux    = (sum.0 & 0xF) == 0;
-    flags.parity = sum.0.count_ones() % 2 == 0;
-    flags.sign   = sum.0 & 0x80 != 0;
+    flags.zero   = sum == 0;
+    flags.aux    = (sum & 0xF) == 0;
+    flags.parity = sum.count_ones() % 2 == 0;
+    flags.sign   = sum & 0x80 != 0;
 
     sum
 }
 
-fn dec(a: W8, flags: &mut Flags) -> W8 {
-    let sum = a - Wrapping(1);
+fn dec(a: u8, flags: &mut Flags) -> u8 {
+    let sum = a.wrapping_sub(1);
    
-    flags.zero   = sum.0 == 0;
-    flags.aux    = (sum.0 & 0xF) != 0xF;
-    flags.parity = sum.0.count_ones() % 2 == 0;
-    flags.sign   = sum.0 & 0x80 != 0;
+    flags.zero   = sum == 0;
+    flags.aux    = (sum & 0xF) != 0xF;
+    flags.parity = sum.count_ones() % 2 == 0;
+    flags.sign   = sum & 0x80 != 0;
 
     sum
 }
 
-fn and(a: W8, b: W8, flags: &mut Flags) -> W8 {
-    let sum16 = a.0 as u16 & b.0 as u16;
+fn and(a: u8, b: u8, flags: &mut Flags) -> u8 {
+    let r = a & b;
    
-    let sum8 = sum16 as u8;
-    flags.zero   = sum8 == 0;
-    flags.aux    = (a.0 & 0x8) | (b.0 & 0x8) != 0;
-    flags.sign   = sum8 & 0x80 != 0;
-    flags.parity = sum8.count_ones() % 2 == 0;
-    flags.carry = false;
+    flags.zero   = r == 0;
+    flags.aux    = (a & 0x8) | (b & 0x8) != 0;
+    flags.sign   = r & 0x80 != 0;
+    flags.parity = r.count_ones() % 2 == 0;
+    flags.carry  = false;
 
-    Wrapping(sum8)
+    r
 }
 
-fn or(a: W8, b: W8, flags: &mut Flags) -> W8 {
-    let sum16 = a.0 as u16 | b.0 as u16;
+fn or(a: u8, b: u8, flags: &mut Flags) -> u8 {
+    let r = a | b;
    
-    let sum8 = sum16 as u8;
-    flags.zero = sum8 == 0;
+    flags.zero = r == 0;
     flags.carry = false;
     flags.aux = false;
-    flags.sign = sum8 & 0x80 != 0;
-    flags.parity = sum8.count_ones() % 2 == 0;
+    flags.sign = r & 0x80 != 0;
+    flags.parity = r.count_ones() % 2 == 0;
 
-    Wrapping(sum8)
+    r
 }
 
-fn xor(a: W8, b: W8, flags: &mut Flags) -> W8 {
-    let sum16 = a.0 as u16 ^ b.0 as u16;
+fn xor(a: u8, b: u8, flags: &mut Flags) -> u8 {
+    let r = a ^ b;
    
-    let sum8 = sum16 as u8;
-    flags.zero = sum8 == 0;
+    flags.zero = r == 0;
     flags.carry = false;
     flags.aux = false;
-    flags.sign = sum8 & 0x80 != 0;
-    flags.parity = sum8.count_ones() % 2 == 0;
+    flags.sign = r & 0x80 != 0;
+    flags.parity = r.count_ones() % 2 == 0;
 
-    Wrapping(sum8)
+    r
 }
 
-fn sub(a: W8, b: W8, c: u8, flags: &mut Flags) -> W8 {
-    let sum16 = (Wrapping(a.0 as u16) - Wrapping(b.0 as u16) - Wrapping(c as u16)).0;
+fn sub(a: u8, b: u8, c: u8, flags: &mut Flags) -> u8 {
+    // We'll do this subtraction at 16 bit width to get access to carry.
+    let r16 = (a as u16).wrapping_sub(b as u16).wrapping_sub(c as u16);
    
-    let sum8 = sum16 as u8;
-    flags.zero   = sum8 == 0;
-    flags.carry  = sum16 & 0x100 != 0;
-    flags.sign   = sum8 & 0x80 != 0;
-    flags.aux    = ((a.0 & 0xF) + (!b.0 & 0xF) + (1 - c)) & 0x10 != 0;
-    flags.parity = sum8.count_ones() % 2 == 0;
+    let r = r16 as u8;
+    flags.zero   = r == 0;
+    flags.carry  = r16 & 0x100 != 0;
+    flags.sign   = r & 0x80 != 0;
+    flags.aux    = ((a & 0xF) + (!b & 0xF) + (1 - c)) & 0x10 != 0;
+    flags.parity = r.count_ones() % 2 == 0;
 
-    Wrapping(sum8)
+    r
 }
 
 fn addsub_template_r(opcode: Opcode,
                      st: &mut Emu,
-                     f: impl FnOnce(W8, W8, u8, &mut Flags) -> W8) -> bool {
+                     f: impl FnOnce(u8, u8, u8, &mut Flags) -> u8) -> bool {
     let rm = opcode.bits(2,0);
     let a = st.reg(Reg::A);
     let b = st.reg_m(rm);
@@ -110,7 +108,7 @@ fn addsub_template_r(opcode: Opcode,
 
 fn addsub_template_i(opcode: Opcode,
                      st: &mut Emu,
-                     f: impl FnOnce(W8, W8, u8, &mut Flags) -> W8) -> bool {
+                     f: impl FnOnce(u8, u8, u8, &mut Flags) -> u8) -> bool {
     let a = st.reg(Reg::A);
     let b = st.take_imm8();
     let c = match opcode.bit(3) {
@@ -124,7 +122,7 @@ fn addsub_template_i(opcode: Opcode,
 
 fn logic_template_r(opcode: Opcode,
                     st: &mut Emu,
-                    f: impl FnOnce(W8, W8, &mut Flags) -> W8) -> bool {
+                    f: impl FnOnce(u8, u8, &mut Flags) -> u8) -> bool {
     let rm = opcode.bits(2,0);
     let a = st.reg(Reg::A);
     let b = st.reg_m(rm);
@@ -134,7 +132,7 @@ fn logic_template_r(opcode: Opcode,
 }
 
 fn logic_template_i(st: &mut Emu,
-                    f: impl FnOnce(W8, W8, &mut Flags) -> W8) -> bool {
+                    f: impl FnOnce(u8, u8, &mut Flags) -> u8) -> bool {
     let a = st.reg(Reg::A);
     let b = st.take_imm8();
     let a = f(a, b, &mut st.flags);
@@ -142,7 +140,7 @@ fn logic_template_i(st: &mut Emu,
     st.advance(7)
 }
 
-fn compare(a: W8, b: W8, flags: &mut Flags) {
+fn compare(a: u8, b: u8, flags: &mut Flags) {
     sub(a, b, 0, flags);
 }
 
@@ -272,7 +270,7 @@ static ISA_DEFS: &[IsaDef] = &[
     (b"11nnn111",
      |opcode| InsnInfo::unary("RST", opcode.con(5,3)),
      |opcode, st, _| {
-         let addr = Wrapping(opcode.bits::<u16>(5,3) * 8);
+         let addr = opcode.bits::<u16>(5,3) << 3;
          st.call(addr);
          st.advance(11)
      }
@@ -318,9 +316,9 @@ static ISA_DEFS: &[IsaDef] = &[
     (b"11110101",
      |_| InsnInfo::unary("PUSH", Operand::PSW),
      |_, st, _| {
-         let psw = ((st.reg(Reg::A).0 as u16) << 8)
+         let psw = ((st.reg(Reg::A) as u16) << 8)
              | (st.flags.bits() as u16);
-         st.push(Wrapping(psw));
+         st.push(psw);
          st.advance(11)
      }
     ),
@@ -336,8 +334,8 @@ static ISA_DEFS: &[IsaDef] = &[
     (b"11110001",
      |_| InsnInfo::unary("POP", Operand::PSW),
      |_, st, _| {
-         let psw = st.pop().0;
-         st.set_reg(Reg::A, Wrapping((psw >> 8) as u8));
+         let psw = st.pop();
+         st.set_reg(Reg::A, (psw >> 8) as u8);
          st.flags.from_bits(psw as u8);
          st.advance(10)
      }
@@ -373,9 +371,9 @@ static ISA_DEFS: &[IsaDef] = &[
      |opcode| InsnInfo::unary("DAD", opcode.rp(5,4)),
      |opcode, st, _| {
          let rp = opcode.bits(5,4);
-         let a = st.reg_pair(rp);
-         let r32 = a.0 as u32 + st.reg_pair(RegPair::HL).0 as u32;
-         st.set_reg_pair(RegPair::HL, Wrapping(r32 as u16));
+         // This can't overflow because of zero extension.
+         let r32 = st.reg_pair(rp) as u32 + st.reg_pair(RegPair::HL) as u32;
+         st.set_reg_pair(RegPair::HL, r32 as u16);
          
          st.flags.carry = r32 & 0x10000 != 0;
          st.advance(10)
@@ -478,7 +476,7 @@ static ISA_DEFS: &[IsaDef] = &[
      |opcode, st, _| {
         let rp = opcode.bits(5,4);
         let a = st.reg_pair(rp);
-        st.set_reg_pair(rp, a + Wrapping(1));
+        st.set_reg_pair(rp, a.wrapping_add(1));
         st.advance(5)
      },
     ),
@@ -487,7 +485,7 @@ static ISA_DEFS: &[IsaDef] = &[
      |opcode, st, _| {
         let rp = opcode.bits(5,4);
         let a = st.reg_pair(rp);
-        st.set_reg_pair(rp, a - Wrapping(1));
+        st.set_reg_pair(rp, a.wrapping_sub(1));
         st.advance(5)
      },
     ),
@@ -520,7 +518,7 @@ static ISA_DEFS: &[IsaDef] = &[
          let a = st.reg(Reg::A);
          let r = (a << 1) | (a >> 7);
 
-         st.flags.carry = a.0 & 0x80 != 0;
+         st.flags.carry = a & 0x80 != 0;
 
          st.set_reg(Reg::A, r);
          st.advance(4)
@@ -530,11 +528,12 @@ static ISA_DEFS: &[IsaDef] = &[
      |_| InsnInfo::inherent("RAL"),
      |_, st, _| {
          let a = st.reg(Reg::A);
-         let r = (a << 1) | Wrapping(st.flags.carry as u8);
-
-         st.flags.carry = a.0 & 0x80 != 0;
-
+         // Carry goes into low bit,
+         let r = (a << 1) | (st.flags.carry as u8);
          st.set_reg(Reg::A, r);
+         // and high bit goes into carry.
+         st.flags.carry = a & 0x80 != 0;
+
          st.advance(4)
      },
     ),
@@ -544,7 +543,7 @@ static ISA_DEFS: &[IsaDef] = &[
          let a = st.reg(Reg::A);
          let r = (a >> 1) | (a << 7);
 
-         st.flags.carry = a.0 & 1 != 0;
+         st.flags.carry = a & 1 != 0;
 
          st.set_reg(Reg::A, r);
          st.advance(4)
@@ -554,11 +553,12 @@ static ISA_DEFS: &[IsaDef] = &[
      |_| InsnInfo::inherent("RAR"),
      |_, st, _| {
          let a = st.reg(Reg::A);
-         let r = (a >> 1) | Wrapping((st.flags.carry as u8) << 7);
-
-         st.flags.carry = a.0 & 1 != 0;
-
+         // Carry goes into high bit,
+         let r = (a >> 1) | (st.flags.carry as u8) << 7;
          st.set_reg(Reg::A, r);
+         // And low bit goes into carry.
+         st.flags.carry = a & 1 != 0;
+
          st.advance(4)
      },
     ),
@@ -569,16 +569,16 @@ static ISA_DEFS: &[IsaDef] = &[
          let mut carry = st.flags.carry;
          let a = st.reg(Reg::A);
          let mut b = 0;
-         if st.flags.aux || (a.0 & 0xF) > 9 {
+         if st.flags.aux || (a & 0xF) > 9 {
              b = 6;
          }
          if st.flags.carry ||
-             (a.0 >> 4) > 9 ||
-             ((a.0 >> 4) == 9 && (a.0 & 0xF) > 9) {
+             (a >> 4) > 9 ||
+             ((a >> 4) == 9 && (a & 0xF) > 9) {
             b |= 0x60;
             carry |= true;
          }
-         let r = add(a, Wrapping(b), 0, &mut st.flags);
+         let r = add(a, b, 0, &mut st.flags);
          st.set_reg(Reg::A, r);
          st.flags.carry |= carry;
          st.advance(4)
@@ -628,8 +628,8 @@ static ISA_DEFS: &[IsaDef] = &[
      |_| InsnInfo::unary("IN", Operand::Port8),
      |_, st, ctx| {
          let p = st.take_imm8();
-         let v = ctx.io.read_port(p.0);
-         st.set_reg(Reg::A, Wrapping(v));
+         let v = ctx.io.read_port(p);
+         st.set_reg(Reg::A, v);
          st.advance(10)
      },
     ),
@@ -638,7 +638,7 @@ static ISA_DEFS: &[IsaDef] = &[
      |_, st, ctx| {
          let p = st.take_imm8();
          let v = st.reg(Reg::A);
-         ctx.io.write_port(p.0, v.0);
+         ctx.io.write_port(p, v);
          st.advance(10)
      },
     ),

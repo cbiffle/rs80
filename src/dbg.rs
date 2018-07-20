@@ -3,7 +3,6 @@
 use std::io::{self, prelude::*};
 use std::collections::HashMap;
 use std::fs;
-use std::num::Wrapping;
 
 use super::isa::{Reg, RegPair};
 use super::emu;
@@ -180,7 +179,7 @@ impl Mon {
             },
             Ok(a) => a,
         };
-        self.machine.set_reg(reg, Wrapping(val));
+        self.machine.set_reg(reg, val);
     }
 
     fn set_reg_pair(&mut self,
@@ -193,7 +192,7 @@ impl Mon {
             },
             Ok(a) => a,
         };
-        self.machine.set_reg_pair(reg, Wrapping(val));
+        self.machine.set_reg_pair(reg, val);
     }
 
     fn jump(&mut self,
@@ -205,7 +204,7 @@ impl Mon {
             },
             Ok(a) => a,
         };
-        self.machine.jump(Wrapping(addr));
+        self.machine.jump(addr);
     }
 
     fn install_breakpoints(&mut self) {
@@ -267,7 +266,7 @@ impl Mon {
                     // halted.
                     if self.breakpoints.contains_key(&halt_addr) {
                         // Back up to the breakpoint.
-                        self.machine.jump(Wrapping(halt_addr));
+                        self.machine.jump(halt_addr);
                         println!("Breakpoint @{:04X}", halt_addr);
                         return
                     } else {

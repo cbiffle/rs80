@@ -1,4 +1,3 @@
-use std::num::Wrapping;
 
 use super::isa::{CC, Reg, RegM, RegPair, Opcode};
 use super::ops;
@@ -69,22 +68,17 @@ impl Flags {
     }
 }
 
-/// Shorthand for a `u8` where overflow is accepted and causes wrapping.
-pub type W8 = Wrapping<u8>;
-/// Shorthand for a `u16` where overflow is accepted and causes wrapping.
-pub type W16 = Wrapping<u16>;
-
 /// Emulator state.
 #[derive(Clone)]
 pub struct Emu {
     /// 8-bit registers in encoding order, with placeholder at index 6.
-    registers: [W8; 8],
+    registers: [u8; 8],
     /// Stack pointer. The stack is full-descending: this points to the most
     /// recently pushed value, and the next value will be pushed 2 lower. Stack
     /// pointer alignment is not required or maintained.
-    sp: W16,
+    sp: u16,
     /// Program counter.
-    pc: W16,
+    pc: u16,
     /// Memory image.
     pub mem: [u8; 65536],
     /// Cycle counter, increments for every 8080 cycle (*not* every emulated
@@ -101,9 +95,9 @@ pub struct Emu {
 impl Default for Emu {
     fn default() -> Self {
         Emu {
-            registers: [Wrapping(0); 8],
-            sp: Wrapping(0),
-            pc: Wrapping(0),
+            registers: [0; 8],
+            sp: 0,
+            pc: 0,
             mem: [0; 0x1_0000],
             cycles: 0,
             interrupts: false,
@@ -115,12 +109,12 @@ impl Default for Emu {
 impl Emu {
     /// Accesses the current value of a register.
     #[inline]
-    pub fn reg(&self, i: Reg) -> W8 {
+    pub fn reg(&self, i: Reg) -> u8 {
         self.registers[i as usize]
     }
 
     /// Accesses either a register or memory through `(HL)`.
-    pub fn reg_m(&self, i: RegM) -> W8 {
+    pub fn reg_m(&self, i: RegM) -> u8 {
         match i {
             RegM::M => {
                 let addr = self.reg_pair(RegPair::HL);
@@ -131,12 +125,12 @@ impl Emu {
     }
 
     /// Updates a register.
-    pub fn set_reg(&mut self, i: Reg, v: W8) {
+    pub fn set_reg(&mut self, i: Reg, v: u8) {
         self.registers[i as usize] = v
     }
 
     /// Updates either a register or memory through `(HL)`.
-    pub fn set_reg_m(&mut self, i: RegM, v: W8) {
+    pub fn set_reg_m(&mut self, i: RegM, v: u8) {
         match i {
             RegM::M => {
                 let addr = self.reg_pair(RegPair::HL);
@@ -148,28 +142,27 @@ impl Emu {
 
     /// Accesses a 16-bit register pair.
     #[inline]
-    pub fn reg_pair(&self, i: RegPair) -> W16 {
+    pub fn reg_pair(&self, i: RegPair) -> u16 {
         match i {
             RegPair::SP => self.sp,
             _ => {
                 let offset = 2 * (i as usize);
                 debug_assert!(offset != 5 && offset != 6);
-                Wrapping(
-                    ((self.registers[offset].0 as u16) << 8)
-                    | (self.registers[offset + 1].0 as u16))
+                ((self.registers[offset] as u16) << 8)
+                    | (self.registers[offset + 1] as u16)
             },
         }
     }
 
     /// Updates a 16-bit register pair.
-    pub fn set_reg_pair(&mut self, i: RegPair, v: W16) {
+    pub fn set_reg_pair(&mut self, i: RegPair, v: u16) {
         match i {
             RegPair::SP => self.sp = v,
             _ => {
                 let offset = 2 * (i as usize);
                 debug_assert!(offset != 5 && offset != 6);
-                self.registers[offset] = Wrapping((v >> 8).0 as u8);
-                self.registers[offset + 1] = Wrapping(v.0 as u8);
+                self.registers[offset] = (v >> 8) as u8;
+                self.registers[offset + 1] = v as u8;
             },
         }
     }
@@ -184,54 +177,53 @@ impl Emu {
     }
 
     /// Stores `val` to memory at `addr`.
-    pub fn store(&mut self, addr: W16, val: W8) {
-        self.mem[addr.0 as usize] = val.0
+    pub fn store(&mut self, addr: u16, val: u8) {
+        self.mem[addr as usize] = val
     }
 
     /// Loads from memory at `addr`.
     #[inline]
-    pub fn load(&self, addr: W16) -> W8 {
-        Wrapping(self.mem[addr.0 as usize])
+    pub fn load(&self, addr: u16) -> u8 {
+        self.mem[addr as usize]
     }
 
     /// Stores a 16-bit `val` to memory, in little-endian order, at `addr` and
     /// `addr+1`.
-    pub fn store16(&mut self, addr: W16, val: W16) {
-        self.mem[addr.0 as usize] = val.0 as u8;
-        self.mem[addr.0.wrapping_add(1) as usize] = (val.0 >> 8) as u8;
+    pub fn store16(&mut self, addr: u16, val: u16) {
+        self.mem[addr as usize] = val as u8;
+        self.mem[addr.wrapping_add(1) as usize] = (val >> 8) as u8;
     }
 
     /// Loads a 16-bit word from memory, in little-endian order, at `addr` and
     /// `addr+1`.
-    pub fn load16(&self, addr: W16) -> W16 {
-        Wrapping((self.mem[addr.0 as usize] as u16)
-                 | ((self.mem[(addr + Wrapping(1)).0 as usize] as u16)
-                        << 8))
+    pub fn load16(&self, addr: u16) -> u16 {
+        (self.mem[addr as usize] as u16)
+            | ((self.mem[addr.wrapping_add(1) as usize] as u16) << 8)
     }
 
     /// Consumes an immediate byte from the instruction stream, advancing PC.
     #[inline]
-    pub fn take_imm8(&mut self) -> W8 {
+    pub fn take_imm8(&mut self) -> u8 {
         let v = self.load(self.pc);
-        self.pc += Wrapping(1);
+        self.pc = self.pc.wrapping_add(1);
         v
     }
 
     /// Consumes an immediate word from the instruction stream, in little-endian
     /// order, advancing PC by two.
-    pub fn take_imm16(&mut self) -> W16 {
+    pub fn take_imm16(&mut self) -> u16 {
         let v = self.load16(self.pc);
-        self.pc += Wrapping(2);
+        self.pc = self.pc.wrapping_add(2);
         v
     }
 
     /// Effects a jump to `addr` by replacing the PC.
-    pub fn jump(&mut self, addr: W16) {
+    pub fn jump(&mut self, addr: u16) {
         self.pc = addr
     }
 
     /// Effects a call to `addr` by pushing the PC.
-    pub fn call(&mut self, addr: W16) {
+    pub fn call(&mut self, addr: u16) {
         let pc = self.pc;
         self.push(pc);
         self.pc = addr
@@ -243,16 +235,16 @@ impl Emu {
     }
 
     /// Pushes `val` onto the stack.
-    pub fn push(&mut self, val: W16) {
-        self.sp -= Wrapping(2);
+    pub fn push(&mut self, val: u16) {
+        self.sp = self.sp.wrapping_sub(2);
         let sp = self.sp;
         self.store16(sp, val)
     }
 
     /// Pops a word from the stack.
-    pub fn pop(&mut self) -> W16 {
+    pub fn pop(&mut self) -> u16 {
         let v = self.load16(self.sp);
-        self.sp += Wrapping(2);
+        self.sp = self.sp.wrapping_add(2);
         v
     }
 
@@ -270,7 +262,7 @@ impl Emu {
 
     #[inline]
     pub fn get_pc(&self) -> u16 {
-        self.pc.0
+        self.pc
     }
 }
 
@@ -310,7 +302,7 @@ pub fn run(emu: &mut Emu, io: &mut Ports) -> Result<(u16, u16), RunError> {
         last_pc = pc;
         // Record start of this instruction.
         pc = emu.get_pc();
-        let op = emu.take_imm8().0;
+        let op = emu.take_imm8();
         let halted = match table[op as usize] {
             None => return Err(RunError::UnimplementedInstruction(op, last_pc)),
             Some(f) => f(Opcode(op), emu, &mut ctx),
@@ -330,7 +322,7 @@ pub fn step(emu: &mut Emu, io: &mut Ports) -> Result<bool, RunError> {
     let mut ctx = ops::Ctx { io };
 
     let last_pc = emu.get_pc();
-    let op = emu.take_imm8().0;
+    let op = emu.take_imm8();
     let halted = match table[op as usize] {
         None => return Err(RunError::UnimplementedInstruction(op, last_pc)),
         Some(f) => f(Opcode(op), emu, &mut ctx),
