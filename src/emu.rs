@@ -34,18 +34,18 @@ impl Default for Flags {
 }
 
 impl Flags {
-    /// Packs the flags into a `u8`. Used when pushing PSW.
-    pub fn bits(&self) -> u8 {
-        (self.carry as u8)
-            | (1u8 << 1)  // UN1 flag always observes as 1
-            | ((self.parity as u8) << 2)
-            | ((self.aux as u8) << 4)
-            | ((self.zero as u8) << 6)
-            | ((self.sign as u8) << 7)
+    /// Packs the flags into the low bits of a `u16`. Used when pushing PSW.
+    pub fn bits(&self) -> u16 {
+        (self.carry as u16)
+            | (1u16 << 1)  // UN1 flag always observes as 1
+            | ((self.parity as u16) << 2)
+            | ((self.aux as u16) << 4)
+            | ((self.zero as u16) << 6)
+            | ((self.sign as u16) << 7)
     }
 
-    /// Unpacks the flags from a `u8`. Used when popping PSW.
-    pub fn from_bits(&mut self, val: u8) {
+    /// Unpacks the flags from the PSW. Used when popping.
+    pub fn from_psw(&mut self, val: u16) {
         self.carry  = (val & (1 << 0)) != 0;
         self.zero   = (val & (1 << 6)) != 0;
         self.parity = (val & (1 << 2)) != 0;

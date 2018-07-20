@@ -316,8 +316,7 @@ static ISA_DEFS: &[IsaDef] = &[
     (b"11110101",
      |_| InsnInfo::unary("PUSH", Operand::PSW),
      |_, st, _| {
-         let psw = ((st.reg(Reg::A) as u16) << 8)
-             | (st.flags.bits() as u16);
+         let psw = ((st.reg(Reg::A) as u16) << 8) | st.flags.bits();
          st.push(psw);
          st.advance(11)
      }
@@ -336,7 +335,7 @@ static ISA_DEFS: &[IsaDef] = &[
      |_, st, _| {
          let psw = st.pop();
          st.set_reg(Reg::A, (psw >> 8) as u8);
-         st.flags.from_bits(psw as u8);
+         st.flags.from_psw(psw);
          st.advance(10)
      }
     ),
