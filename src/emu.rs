@@ -198,7 +198,7 @@ impl Emu {
     /// `addr+1`.
     pub fn store16(&mut self, addr: W16, val: W16) {
         self.mem[addr.0 as usize] = val.0 as u8;
-        self.mem[addr.0 as usize + 1] = (val.0 >> 8) as u8;
+        self.mem[addr.0.wrapping_add(1) as usize] = (val.0 >> 8) as u8;
     }
 
     /// Loads a 16-bit word from memory, in little-endian order, at `addr` and
