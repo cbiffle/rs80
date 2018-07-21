@@ -4,6 +4,7 @@ use super::dis::{InsnInfo, Operand};
 use super::emu::{Emu, Flags, Ports};
 
 ////////////////////////////////////////////////////////////////////////////////
+// Reusable (or at least *reused*) arithmetic operations.
 
 fn add(a: u8, b: u8, c: u8, flags: &mut Flags) -> u8 {
     // This addition can't overflow because of the zero-extension.
@@ -91,6 +92,11 @@ fn sub(a: u8, b: u8, c: u8, flags: &mut Flags) -> u8 {
     r
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// Instruction implementation templates. These are parameterized on the function
+// passed in (note the `impl`) so they get specialized and optimized.
+
+/// Non-immediate add or subtract.
 fn addsub_template_r(opcode: Opcode,
                      st: &mut Emu,
                      f: impl FnOnce(u8, u8, u8, &mut Flags) -> u8) -> bool {
@@ -106,6 +112,7 @@ fn addsub_template_r(opcode: Opcode,
     st.advance(rm.reg_or_m(4, 7))
 }
 
+/// Immediate add or subtract.
 fn addsub_template_i(opcode: Opcode,
                      st: &mut Emu,
                      f: impl FnOnce(u8, u8, u8, &mut Flags) -> u8) -> bool {
@@ -120,6 +127,7 @@ fn addsub_template_i(opcode: Opcode,
     st.advance(7)
 }
 
+/// Non-immediate logic.
 fn logic_template_r(opcode: Opcode,
                     st: &mut Emu,
                     f: impl FnOnce(u8, u8, &mut Flags) -> u8) -> bool {
@@ -131,6 +139,7 @@ fn logic_template_r(opcode: Opcode,
     st.advance(rm.reg_or_m(4, 7))
 }
 
+/// Immediate logic.
 fn logic_template_i(st: &mut Emu,
                     f: impl FnOnce(u8, u8, &mut Flags) -> u8) -> bool {
     let a = st.reg(Reg::A);
@@ -140,9 +149,12 @@ fn logic_template_i(st: &mut Emu,
     st.advance(7)
 }
 
+/// Compare is just subtract with the result discarded.
 fn compare(a: u8, b: u8, flags: &mut Flags) {
     sub(a, b, 0, flags);
 }
+
+
 
 pub struct Ctx<'a> {
     pub io: &'a mut Ports,
@@ -153,6 +165,7 @@ type DispatchFn = fn(Opcode, &mut Emu, &mut Ctx) -> bool;
 type IsaDef = (&'static [u8],
                fn(Opcode) -> InsnInfo,
                DispatchFn);
+
 static ISA_DEFS: &[IsaDef] = &[
     (b"01110110",
      |_| InsnInfo::inherent("HLT"),
