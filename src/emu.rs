@@ -13,9 +13,9 @@ pub struct Flags {
     /// Result produced carry.
     pub carry: bool,
     /// Result had even parity.
-    pub parity: bool,
+    pub parity_input: u8,
     /// Result produced auxiliary (half) carry.
-    pub aux: bool,
+    pub aux_input: (u8, u8, u8, bool),
     /// Result was negative.
     pub sign: bool,
 }
@@ -26,20 +26,29 @@ impl Default for Flags {
         Flags {
             zero: false,
             carry: false,
-            parity: false,
-            aux: false,
+            parity_input: 1,
+            aux_input: (0, 0, 0, false),
             sign: false,
         }
     }
 }
 
 impl Flags {
+    pub fn parity(&self) -> bool {
+        self.parity_input.count_ones() % 2 == 0
+    }
+
+    pub fn aux(&self) -> bool {
+        let (a, b, c, f) = self.aux_input;
+        f || ((a & 0xF) + (b & 0xF) + c) & 0x10 != 0
+    }
+
     /// Packs the flags into the low bits of a `u16`. Used when pushing PSW.
     pub fn bits(&self) -> u16 {
         (self.carry as u16)
             | (1u16 << 1)  // UN1 flag always observes as 1
-            | ((self.parity as u16) << 2)
-            | ((self.aux as u16) << 4)
+            | ((self.parity() as u16) << 2)
+            | ((self.aux() as u16) << 4)
             | ((self.zero as u16) << 6)
             | ((self.sign as u16) << 7)
     }
@@ -48,8 +57,8 @@ impl Flags {
     pub fn from_psw(&mut self, val: u16) {
         self.carry  = (val & (1 << 0)) != 0;
         self.zero   = (val & (1 << 6)) != 0;
-        self.parity = (val & (1 << 2)) != 0;
-        self.aux    = (val & (1 << 4)) != 0;
+        self.parity_input = (val as u8 & (1 << 2)) | 1;
+        self.aux_input = (0, 0, 0, (val & (1 << 4)) != 0);
         self.sign   = (val & (1 << 7)) != 0;
     }
 
@@ -60,8 +69,8 @@ impl Flags {
             CC::Z  =>  self.zero,
             CC::NC => !self.carry,
             CC::C  =>  self.carry,
-            CC::PO => !self.parity,
-            CC::PE =>  self.parity,
+            CC::PO => !self.parity(),
+            CC::PE =>  self.parity(),
             CC::P  => !self.sign,
             CC::N  =>  self.sign,
         }

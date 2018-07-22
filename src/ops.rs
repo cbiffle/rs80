@@ -14,70 +14,76 @@ fn add(a: u8, b: u8, c: u8, flags: &mut Flags) -> u8 {
     flags.zero = sum8 == 0;
     flags.carry = sum16 & 0x100 != 0;
     flags.sign = sum8 & 0x80 != 0;
-    flags.aux = ((a & 0xF) + (b & 0xF) + c) & 0x10 != 0;
-    flags.parity = sum8.count_ones() % 2 == 0;
+    flags.aux_input = (a, b, c, false);
+    flags.parity_input = sum8;
 
     sum8
 }
 
+#[inline]
 fn inc(a: u8, flags: &mut Flags) -> u8 {
     let sum = a.wrapping_add(1);
    
     flags.zero   = sum == 0;
-    flags.aux    = (sum & 0xF) == 0;
-    flags.parity = sum.count_ones() % 2 == 0;
+    flags.aux_input = (a, 1, 0, false);
+    flags.parity_input = sum;
     flags.sign   = sum & 0x80 != 0;
 
     sum
 }
 
+#[inline]
 fn dec(a: u8, flags: &mut Flags) -> u8 {
     let sum = a.wrapping_sub(1);
    
     flags.zero   = sum == 0;
-    flags.aux    = (sum & 0xF) != 0xF;
-    flags.parity = sum.count_ones() % 2 == 0;
+    flags.aux_input = (a, 0xFF, 0, false);
+    flags.parity_input = sum;
     flags.sign   = sum & 0x80 != 0;
 
     sum
 }
 
+#[inline]
 fn and(a: u8, b: u8, flags: &mut Flags) -> u8 {
     let r = a & b;
    
     flags.zero   = r == 0;
-    flags.aux    = (a & 0x8) | (b & 0x8) != 0;
+    flags.aux_input = (0,0,0, (a & 0x8) | (b & 0x8) != 0);
     flags.sign   = r & 0x80 != 0;
-    flags.parity = r.count_ones() % 2 == 0;
+    flags.parity_input = r;
     flags.carry  = false;
 
     r
 }
 
+#[inline]
 fn or(a: u8, b: u8, flags: &mut Flags) -> u8 {
     let r = a | b;
    
     flags.zero = r == 0;
     flags.carry = false;
-    flags.aux = false;
+    flags.aux_input = (0, 0, 0, false);
     flags.sign = r & 0x80 != 0;
-    flags.parity = r.count_ones() % 2 == 0;
+    flags.parity_input = r;
 
     r
 }
 
+#[inline]
 fn xor(a: u8, b: u8, flags: &mut Flags) -> u8 {
     let r = a ^ b;
    
     flags.zero = r == 0;
     flags.carry = false;
-    flags.aux = false;
+    flags.aux_input = (0, 0, 0, false);
     flags.sign = r & 0x80 != 0;
-    flags.parity = r.count_ones() % 2 == 0;
+    flags.parity_input = r;
 
     r
 }
 
+#[inline]
 fn sub(a: u8, b: u8, c: u8, flags: &mut Flags) -> u8 {
     // We'll do this subtraction at 16 bit width to get access to carry.
     let r16 = (a as u16).wrapping_sub(b as u16).wrapping_sub(c as u16);
@@ -86,8 +92,8 @@ fn sub(a: u8, b: u8, c: u8, flags: &mut Flags) -> u8 {
     flags.zero   = r == 0;
     flags.carry  = r16 & 0x100 != 0;
     flags.sign   = r & 0x80 != 0;
-    flags.aux    = ((a & 0xF) + (!b & 0xF) + (1 - c)) & 0x10 != 0;
-    flags.parity = r.count_ones() % 2 == 0;
+    flags.aux_input = (a, !b, 1 - c, false);
+    flags.parity_input = r;
 
     r
 }
@@ -581,7 +587,7 @@ static ISA_DEFS: &[IsaDef] = &[
          let mut carry = st.flags.carry;
          let a = st.reg(Reg::A);
          let mut b = 0;
-         if st.flags.aux || (a & 0xF) > 9 {
+         if st.flags.aux() || (a & 0xF) > 9 {
              b = 6;
          }
          if st.flags.carry ||

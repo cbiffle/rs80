@@ -102,8 +102,8 @@ impl Mon {
                self.machine.reg_pair(RegPair::SP),
                self.machine.get_pc(),
                if self.machine.flags.carry  { 'C' } else { '-' },
-               if self.machine.flags.parity { 'P' } else { '-' },
-               if self.machine.flags.aux    { 'A' } else { '-' },
+               if self.machine.flags.parity() { 'P' } else { '-' },
+               if self.machine.flags.aux()  { 'A' } else { '-' },
                if self.machine.flags.zero   { 'Z' } else { '-' },
                if self.machine.flags.sign   { 'S' } else { '-' })
     }
