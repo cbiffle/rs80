@@ -50,10 +50,17 @@ fn main() -> std::io::Result<()> {
     let duration = start.to(PreciseTime::now());
     let cycle_ns = duration.num_nanoseconds().unwrap() as f64
                  / emu.cycles as f64;
-    println!("Took: {} ({} cycles, {:.4} ns/cyc, {:.3} emulated MHz)",
-                duration,
+    let inst_ns = duration.num_nanoseconds().unwrap() as f64
+                 / emu.inst_count as f64;
+    println!("Took: {}", duration);
+    println!("8080 cycles: {}, {:.4} ns/cyc, {:.3} emulated MHz",
                 emu.cycles,
                 cycle_ns,
                 1000. / cycle_ns);
+    println!("Instructions: {}, {:.4} ns/inst, {:.3} Minst/s",
+                emu.inst_count,
+                inst_ns,
+                1000. / inst_ns);
+
     Ok(())
 }

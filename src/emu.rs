@@ -79,8 +79,6 @@ pub struct Emu {
     sp: u16,
     /// Program counter.
     pc: u16,
-    /// Memory image.
-    pub mem: [u8; 65536],
     /// Cycle counter, increments for every 8080 cycle (*not* every emulated
     /// instruction).
     pub cycles: usize,
@@ -89,6 +87,10 @@ pub struct Emu {
 
     /// CPU flags.
     pub flags: Flags,
+
+    pub inst_count: usize,
+    /// Memory image.
+    pub mem: [u8; 65536],
 }
 
 /// Emulator reset state.
@@ -102,6 +104,7 @@ impl Default for Emu {
             cycles: 0,
             interrupts: false,
             flags: Flags::default(),
+            inst_count: 0,
         }
     }
 }
@@ -303,6 +306,7 @@ pub fn run(emu: &mut Emu, io: &mut Ports) -> Result<(u16, u16), RunError> {
         // Record start of this instruction.
         pc = emu.get_pc();
         let op = emu.take_imm8();
+        emu.inst_count += 1;
         let halted = match table[op as usize] {
             None => return Err(RunError::UnimplementedInstruction(op, last_pc)),
             Some(f) => f(Opcode(op), emu, &mut ctx),
@@ -323,6 +327,7 @@ pub fn step(emu: &mut Emu, io: &mut Ports) -> Result<bool, RunError> {
 
     let last_pc = emu.get_pc();
     let op = emu.take_imm8();
+    emu.inst_count += 1;
     let halted = match table[op as usize] {
         None => return Err(RunError::UnimplementedInstruction(op, last_pc)),
         Some(f) => f(Opcode(op), emu, &mut ctx),
