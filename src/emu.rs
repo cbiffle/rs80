@@ -183,8 +183,7 @@ impl Emu {
     ///
     /// This is often the last thing to be called by a dispatch function, so it
     /// returns `false` (meaning "not halted") for convenience.
-    pub fn advance(&mut self, n: usize) -> bool {
-        self.cycles += n;
+    pub fn advance(&mut self, _: usize) -> bool {
         false
     }
 
