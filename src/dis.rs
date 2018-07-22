@@ -1,4 +1,4 @@
-use super::isa::{CC, RegM, RegPair, Opcode};
+use super::isa::{CC, RegM, RegPair};
 use super::ops;
 
 use std::io::{self, prelude::*};
@@ -87,7 +87,7 @@ impl InsnInfo {
 
 pub fn disassemble(bytes: &mut impl Iterator<Item = io::Result<u8>>,
                    out: &mut impl Write) -> io::Result<usize> {
-    let table = ops::make_decode_table();
+    let table: &[_; 256] = &ops::INSN_INFO;
     let opcode = match bytes.next() {
         None => return Ok(0),
         Some(op) => op?,
@@ -95,24 +95,19 @@ pub fn disassemble(bytes: &mut impl Iterator<Item = io::Result<u8>>,
 
     let mut used = vec![opcode];
     let mut buf = io::Cursor::new(vec![]);
-    match table[opcode as usize] {
-        None => write!(&mut buf, "DB\t{:02X}", opcode)?,
-        Some(f) => {
-            let insn = f(Opcode(opcode));
-            if let Some(cc) = insn.mnemonic.cc {
-                write!(&mut buf, "{}{:?}", insn.mnemonic.label, cc)?;
-            } else {
-                write!(&mut buf, "{}", insn.mnemonic.label)?;
-            }
-            if let Some(a) = insn.a {
-                write!(&mut buf, "\t")?;
-                print_operand(a, bytes, &mut used, &mut buf)?;
-                if let Some(b) = insn.b {
-                    write!(&mut buf, ",")?;
-                    print_operand(b, bytes, &mut used, &mut buf)?;
-                }
-            }
-        },
+    let insn = &table[opcode as usize];
+    if let Some(cc) = insn.mnemonic.cc {
+        write!(&mut buf, "{}{:?}", insn.mnemonic.label, cc)?;
+    } else {
+        write!(&mut buf, "{}", insn.mnemonic.label)?;
+    }
+    if let Some(a) = insn.a {
+        write!(&mut buf, "\t")?;
+        print_operand(a, bytes, &mut used, &mut buf)?;
+        if let Some(b) = insn.b {
+            write!(&mut buf, ",")?;
+            print_operand(b, bytes, &mut used, &mut buf)?;
+        }
     }
 
     let text = String::from_utf8(buf.into_inner()).unwrap();

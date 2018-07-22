@@ -302,7 +302,6 @@ pub enum RunError {
 /// a call or jump.)
 #[inline]
 pub fn run(emu: &mut Emu, io: &mut Ports) -> Result<(u16, u16), RunError> {
-    let table: &[_; 256] = &ops::DISPATCH;
     let mut pc = 0xFFFF;
     let mut last_pc;
 
@@ -315,7 +314,7 @@ pub fn run(emu: &mut Emu, io: &mut Ports) -> Result<(u16, u16), RunError> {
         pc = emu.get_pc();
         let op = emu.take_imm8();
         emu.inst_count += 1;
-        let halted = table[op as usize](Opcode(op), emu, &mut ctx);
+        let halted = ops::dispatch(emu, &mut ctx, Opcode(op));
         if halted { return Ok((last_pc, pc)) }
     }
 }
@@ -326,12 +325,10 @@ pub fn run(emu: &mut Emu, io: &mut Ports) -> Result<(u16, u16), RunError> {
 /// whether the executed instruction was a `HLT`.
 #[inline]
 pub fn step(emu: &mut Emu, io: &mut Ports) -> Result<bool, RunError> {
-    let table: &[_; 256] = &ops::DISPATCH;
-
     let mut ctx = ops::Ctx { io };
 
     let op = emu.take_imm8();
     emu.inst_count += 1;
-    let halted = table[op as usize](Opcode(op), emu, &mut ctx);
+    let halted = ops::dispatch(emu, &mut ctx, Opcode(op));
     Ok(halted)
 }

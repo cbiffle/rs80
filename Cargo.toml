@@ -8,5 +8,8 @@ time = "0.1.40"
 lazy_static = "1.0"
 clap = "2.32"
 
+[build-dependencies]
+combine = "3.3.6"
+
 [profile.release]
 debug = true

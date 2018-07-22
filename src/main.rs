@@ -5,24 +5,12 @@ extern crate time;
 extern crate rs80;
 
 use rs80::emu::{Emu, RunError};
-use rs80::ops::{DISPATCH, make_decode_table};
 use rs80::bdos::*;
 
 use std::io;
 use time::PreciseTime;
 
 fn main() -> std::io::Result<()> {
-    {
-        let table = make_decode_table();
-        let mut covered = 0;
-        for i in 0..=255 {
-            if table[i].is_some() {
-                covered += 1;
-            }
-        }
-        println!("{} / 256 encodings covered.", covered);
-    }
-
     let mut args = std::env::args();
     args.next();
 
@@ -33,9 +21,6 @@ fn main() -> std::io::Result<()> {
 
     let mut emu = Emu::default();
     load_image(filename, &mut emu)?;
-
-    // Force dispatch table initialization:
-    DISPATCH.len();
 
     let start = PreciseTime::now();
     let out = io::stdout();

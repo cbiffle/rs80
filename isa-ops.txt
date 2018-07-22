@@ -1,0 +1,372 @@
+# 8080 ISA specification file
+#
+# Each instruction is described by three header fields and a body of Rust code,
+# following this pattern:
+#
+#   BITS - ASSEMBLY - CYCLES {
+#     RUST CODE
+#   }
+#
+# The order of declarations in the file is not significant.
+#
+# BITS is an 8-bit pattern consisting of some combination of literal bits ('1',
+# '0'), don't-care bits ('_'), and fields named by a repeating letter.
+#
+# The pattern matches any opcode with matching literal bits, and any value in
+# the other bits. If multiple instruction patterns match a single opcode, the
+# most specific one (i.e. the one with the most literal bits) wins.
+#
+# ASSEMBLY is an assembly-language template giving the instruction's mnemonic
+# and operands. Operands are either literals with special meaning (like 'M' or
+# 'PSW') or fields introduced by a type character:
+#   !   8-bit register
+#   ?   8-bit register or M
+#   &   16-bit register pair
+#   #   8-bit literal (follows instruction opcode byte)
+#   ##  16-bit literal (follows instruction opcode byte)
+#   @   16-bit direct address (equivalent to ##)
+#   *   6-bit restart address (multiple of 8).
+#
+# For any operand that gets encoded into the opcode itself, the names used in
+# ASSEMBLY must match the named fields declared in BITS. Literals and addresses
+# (but not restart addresses) are exempt, and are introduced by being mentioned
+# in ASSEMBLY.
+#
+# A single condition code field can be introduced in the mnemonic itself. Such
+# a field is not identified by a type character, but by its position as a lower-
+# case suffix to the upper-case mnemonic. For example, the mnemonic 'Jc' names
+# all the conditional jumps such as 'JNZ' and 'JPE'.
+#
+# CYCLES is either an integer number of cycles required to execute the
+# instruction on an 8080A, or two numbers separated by a slash (e.g. '4/7').
+# In the latter case, the choice between the two is made based on the operands:
+#
+# - If a condition code field is present, the numbers represent taken / not
+#   taken.
+# - If a register/memory field is present (type '?'), the numbers represent
+#   register / memory.
+#
+# RUST CODE is a block of Rust code, terminated by a closing curly bracket at
+# the left margin. Within the block, certain bindings are available
+# automatically:
+#
+# - 'opcode' is the opcode being processed. This is a concrete constant even if
+#   the instruction can be encoded several different ways.
+# - A condition code operand named 'x' is bound to a local named 'x' of type
+#   'bool', whose value indicates whether the condition has passed.
+# - Any other named operand 'z' is bound to a local 'z' of appropriate type:
+#   - 'isa::Reg' for '!'
+#   - 'isa::RegM' for '?'
+#   - 'isa::RegPair' for '&'
+#   - 'u8' for '#'
+#   - 'u16' for '##', '@', and '*'.
+
+################################################################################
+# Moves of various flavors.
+# Note that MOV M, M actually encodes a HLT, which is later in this file.
+
+01110sss - MOV M, !s - 7 {
+  let v = st.reg(s);
+  let addr = st.reg_pair(RegPair::HL);
+  st.store(addr, v);
+}
+01ddd110 - MOV !d, M - 7 {
+  let addr = st.reg_pair(RegPair::HL);
+  let v = st.load(addr);
+  st.set_reg(d, v);
+}
+01dddsss - MOV !d, !s - 5 {
+  let v = st.reg(s);
+  st.set_reg(d, v);
+}
+
+00ddd110 - MVI ?d, #i - 7 {
+  st.set_reg_m(d, i);
+}
+
+00pp0001 - LXI &p, ##i - 10 {
+  st.set_reg_pair(p, i);
+}
+
+11101011 - XCHG - 4 {
+  let de = st.reg_pair(RegPair::DE);
+  let hl = st.reg_pair(RegPair::HL);
+  st.set_reg_pair(RegPair::DE, hl);
+  st.set_reg_pair(RegPair::HL, de);
+}
+
+11111001 - SPHL - 5 {
+  let hl = st.reg_pair(RegPair::HL);
+  st.set_reg_pair(RegPair::SP, hl);
+}
+
+################################################################################
+# Loads'n'Stores
+
+00111010 - LDA @a - 13 {
+  let v = st.load(a);
+  st.set_reg(Reg::A, v);
+}
+00101010 - LHLD @a - 16 {
+  let v = st.load16(a);
+  st.set_reg_pair(RegPair::HL, v);
+}
+00pp1010 - LDAX &p - 7 {
+  let addr = st.reg_pair(p);
+  let v = st.load(addr);
+  st.set_reg(Reg::A, v);
+}
+11110001 - POP PSW - 10 {
+  let psw = st.pop();
+  st.set_reg(Reg::A, (psw >> 8) as u8);
+  st.flags.from_psw(psw);
+}
+11pp0001 - POP &p - 10 {
+  let v = st.pop();
+  st.set_reg_pair(p, v);
+}
+
+00110010 - STA @a - 13 {
+  let v = st.reg(Reg::A);
+  st.store(a, v);
+}
+00100010 - SHLD @a - 16 {
+  let v = st.reg_pair(RegPair::HL);
+  st.store16(a, v);
+}
+00pp0010 - STAX &p - 7 {
+  let addr = st.reg_pair(p);
+  let v = st.reg(Reg::A);
+  st.store(addr, v);
+}
+11110101 - PUSH PSW - 11 {
+  let psw = ((st.reg(Reg::A) as u16) << 8) | st.flags.bits();
+  st.push(psw);
+}
+11pp0101 - PUSH &p - 11 {
+  let v = st.reg_pair(p);
+  st.push(v);
+}
+
+11100011 - XTHL - 18 {
+  let hl = st.reg_pair(RegPair::HL);
+  let tmp = st.pop();
+  st.push(hl);
+  st.set_reg_pair(RegPair::HL, tmp);
+}
+
+################################################################################
+# Flow control
+
+01110110 - HLT - 4 {
+  return true;
+}
+11nnn111 - RST *n - 11 {
+  st.call(n);
+}
+11__1101 - CALL @a - 17 {
+  st.call(a);
+}
+11ccc100 - Cc @a - 11/17 {
+  if c {
+    st.call(a);
+  }
+}
+110_1001 - RET - 10 {
+  st.ret();
+}
+11ccc000 - Rc - 11/5 {
+  if c {
+    st.ret();
+  }
+}
+1100_011 - JMP @a - 10 {
+  st.jump(a);
+}
+11ccc010 - Jc @a - 10 {
+  if c {
+    st.jump(a)
+  }
+}
+
+11101001 - PCHL - 5 {
+  let hl = st.reg_pair(RegPair::HL);
+  st.jump(hl);
+}
+
+################################################################################
+# Arithmetic
+
+10000sss - ADD ?s - 4/7 {
+  addsub_template_r2(opcode, s, st, add);
+}
+10001sss - ADC ?s - 4/7 {
+  addsub_template_r2(opcode, s, st, add);
+}
+10010sss - SUB ?s - 4/7 {
+  addsub_template_r2(opcode, s, st, sub);
+}
+10011sss - SBB ?s - 4/7 {
+  addsub_template_r2(opcode, s, st, sub);
+}
+11000110 - ADI #i - 7 {
+  addsub_template_i2(opcode, i, st, add);
+}
+11001110 - ACI #i - 7 {
+  addsub_template_i2(opcode, i, st, add);
+}
+11010110 - SUI #i - 7 {
+  addsub_template_i2(opcode, i, st, sub);
+}
+11011110 - SBI #i - 7 {
+  addsub_template_i2(opcode, i, st, sub);
+}
+
+00ddd100 - INR ?d - 5/10 {
+  let a = st.reg_m(d);
+  let r = inc(a, &mut st.flags);
+  st.set_reg_m(d, r);
+}
+00ddd101 - DCR ?d - 5/10 {
+  let a = st.reg_m(d);
+  let r = dec(a, &mut st.flags);
+  st.set_reg_m(d, r);
+}
+00pp0011 - INX &p - 5 {
+  let a = st.reg_pair(p);
+  st.set_reg_pair(p, a.wrapping_add(1));
+}
+00pp1011 - DCX &p - 5 {
+  let a = st.reg_pair(p);
+  st.set_reg_pair(p, a.wrapping_sub(1));
+}
+
+10111sss - CMP ?s - 4/7 {
+  let a = st.reg(Reg::A);
+  let b = st.reg_m(s);
+  compare(a, b, &mut st.flags);
+}
+11111110 - CPI #i - 7 {
+  let a = st.reg(Reg::A);
+  compare(a, i, &mut st.flags);
+}
+
+00pp1001 - DAD &p - 10 {
+  // This can't overflow because of zero extension.
+  let r32 = st.reg_pair(p) as u32 + st.reg_pair(RegPair::HL) as u32;
+  st.set_reg_pair(RegPair::HL, r32 as u16);
+         
+  st.flags.carry = r32 & 0x10000 != 0;
+}
+
+00100111 - DAA - 4 {
+  // back up carry flag.
+  let mut carry = st.flags.carry;
+  let a = st.reg(Reg::A);
+  let mut b = 0;
+  if st.flags.aux() || (a & 0xF) > 9 {
+    b = 6;
+  }
+  if st.flags.carry ||
+    (a >> 4) > 9 ||
+      ((a >> 4) == 9 && (a & 0xF) > 9) {
+        b |= 0x60;
+        carry |= true;
+      }
+  let r = add(a, b, 0, &mut st.flags);
+  st.set_reg(Reg::A, r);
+  st.flags.carry |= carry;
+}
+
+################################################################################
+# Logic
+
+10100sss - ANA ?s - 4/7 {
+  logic_template_r2(s, st, and);
+}
+11100110 - ANI #i - 7 {
+  logic_template_i2(st, i, and);
+}
+10110sss - ORA ?s - 4/7 {
+  logic_template_r2(s, st, or);
+}
+11110110 - ORI #i - 7 {
+  logic_template_i2(st, i, or);
+}
+10101sss - XRA ?s - 4/7 {
+  logic_template_r2(s, st, xor);
+}
+11101110 - XRI #i - 7 {
+  logic_template_i2(st, i, xor);
+}
+
+00101111 - CMA - 4 {
+  let a = st.reg(Reg::A);
+  st.set_reg(Reg::A, !a);
+}
+
+00110111 - STC - 4 {
+  st.flags.carry = true;
+}
+00111111 - CMC - 4 {
+  let c = st.flags.carry;
+  st.flags.carry = !c;
+}
+
+00000111 - RLC - 4 {
+  let a = st.reg(Reg::A);
+  let r = (a << 1) | (a >> 7);
+
+  st.flags.carry = a & 0x80 != 0;
+
+  st.set_reg(Reg::A, r);
+}
+00010111 - RAL - 4 {
+  let a = st.reg(Reg::A);
+  // Carry goes into low bit,
+  let r = (a << 1) | (st.flags.carry as u8);
+  st.set_reg(Reg::A, r);
+  // and high bit goes into carry.
+  st.flags.carry = a & 0x80 != 0;
+}
+00001111 - RRC - 4 {
+  let a = st.reg(Reg::A);
+  let r = (a >> 1) | (a << 7);
+
+  st.flags.carry = a & 1 != 0;
+
+  st.set_reg(Reg::A, r);
+}
+00011111 - RAR - 4 {
+  let a = st.reg(Reg::A);
+  // Carry goes into high bit,
+  let r = (a >> 1) | (st.flags.carry as u8) << 7;
+  st.set_reg(Reg::A, r);
+  // And low bit goes into carry.
+  st.flags.carry = a & 1 != 0;
+}
+
+################################################################################
+# I/O and interrupts
+
+11111011 - EI - 4 {
+  st.set_interrupt_flag(true);
+}
+11110011 - DI - 4 {
+  st.set_interrupt_flag(false);
+}
+11011011 - IN #p - 10 {
+  let v = ctx.io.read_port(p);
+  st.set_reg(Reg::A, v);
+}
+11010011 - OUT #p - 10 {
+  let v = st.reg(Reg::A);
+  ctx.io.write_port(p, v);
+}
+
+################################################################################
+# Nops
+
+00___000 - NOP - 4 {
+  // This space intentionally left blank.
+}
