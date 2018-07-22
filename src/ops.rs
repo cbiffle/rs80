@@ -712,9 +712,13 @@ impl ::std::cmp::PartialOrd for Pat {
     }
 }
 
+fn null_dispatch(_: Opcode, _: &mut Emu, _: &mut Ctx) -> bool {
+    true
+}
+
 lazy_static! {
-    pub static ref DISPATCH: [Option<DispatchFn>; 256] = {
-        let mut table = [None; 256];
+    pub static ref DISPATCH: [DispatchFn; 256] = {
+        let mut table = [null_dispatch as DispatchFn; 256];
 
         // Collect all the dispatch functions and sort them by pattern
         // specificity.
@@ -731,7 +735,7 @@ lazy_static! {
         for opc in 0..=255 {
             for &(pat, &op) in &defs {
                 if pat.matches(opc) {
-                    table[opc as usize] = Some(op);
+                    table[opc as usize] = op;
                     // Because we've sorted from most specific to least, the
                     // first matching pattern is the right one. Skip the rest.
                     break;
