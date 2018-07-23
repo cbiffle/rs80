@@ -93,8 +93,6 @@ pub struct Def {
 /// An operand from the assembly template.
 #[derive(Clone, Debug)]
 enum Operand {
-    /// Textual 'M' used for MOV instructions.
-    LiteralM,
     /// Textual 'PSW' used for PUSH/POP instructions.
     LiteralPSW,
     /// Identifier and type of an opcode field.
@@ -106,7 +104,6 @@ enum Operand {
 /// Type of an opcode field.
 #[derive(Clone, Debug)]
 enum FieldOperand {
-    Reg8,
     Reg16,
     RegOrM,
     Restart,
@@ -246,9 +243,6 @@ mod parse {
     {
         choice((
                 string("PSW").map(|_| Operand::LiteralPSW),
-                char('M').map(|_| Operand::LiteralM),
-                char('!').with(letter())
-                    .map(|c| Operand::Field(c, FieldOperand::Reg8)),
                 char('#').with(choice((
                             char('#').with(letter())
                                 .map(|c| Operand::Inline(c,
@@ -377,21 +371,10 @@ mod gen {
                       fields: &HashMap<char, u8>) -> &'static str {
         match op {
             None => "None",
-            Some(Operand::LiteralM) => "Some(Operand::RM(RegM::M))",
             Some(Operand::LiteralPSW) => "Some(Operand::PSW)",
             Some(Operand::Field(c, f)) => {
                 let val = fields[c];
                 match f {
-                    FieldOperand::Reg8 => match val {
-                        0 => "Some(Operand::RM(RegM::R(Reg::B)))",
-                        1 => "Some(Operand::RM(RegM::R(Reg::C)))",
-                        2 => "Some(Operand::RM(RegM::R(Reg::D)))",
-                        3 => "Some(Operand::RM(RegM::R(Reg::E)))",
-                        4 => "Some(Operand::RM(RegM::R(Reg::H)))",
-                        5 => "Some(Operand::RM(RegM::R(Reg::L)))",
-                        7 => "Some(Operand::RM(RegM::R(Reg::A)))",
-                        _ => panic!("bad register number?"),
-                    },
                     FieldOperand::Reg16 => match val {
                         0 => "Some(Operand::RP(RegPair::BC))",
                         1 => "Some(Operand::RP(RegPair::DE))",
@@ -551,10 +534,6 @@ mod gen {
     {
         write!(out, "      ")?; // common indent
         match o {
-            FieldOperand::Reg8 => {
-                assert!(bits != 0b110, "Parsing is wrong: got unexpected M");
-                writeln!(out, "let {} = Reg::from({}u8);", n, bits)
-            },
             FieldOperand::RegOrM =>
                 writeln!(out, "let {} = RegM::from({}u8);", n, bits),
             FieldOperand::Reg16 =>

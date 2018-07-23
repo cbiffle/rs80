@@ -19,7 +19,6 @@
 # ASSEMBLY is an assembly-language template giving the instruction's mnemonic
 # and operands. Operands are either literals with special meaning (like 'M' or
 # 'PSW') or fields introduced by a type character:
-#   !   8-bit register
 #   ?   8-bit register or M
 #   &   16-bit register pair
 #   #   8-bit literal (follows instruction opcode byte)
@@ -44,7 +43,8 @@
 # - If a condition code field is present, the numbers represent taken / not
 #   taken.
 # - If a register/memory field is present (type '?'), the numbers represent
-#   register / memory.
+#   register / memory. (Two register/memory fields are tolerated for the special
+#   case of MOV; this is not ambiguous, because MOV M, M is illegal.)
 #
 # RUST CODE is a block of Rust code, terminated by a closing curly bracket at
 # the left margin. Within the block, certain bindings are available
@@ -65,19 +65,9 @@
 # Moves of various flavors.
 # Note that MOV M, M actually encodes a HLT, which is later in this file.
 
-01110sss - MOV M, !s - 7 {
-  let v = st.reg(s);
-  let addr = st.reg_pair(RegPair::HL);
-  st.store(addr, v);
-}
-01ddd110 - MOV !d, M - 7 {
-  let addr = st.reg_pair(RegPair::HL);
-  let v = st.load(addr);
-  st.set_reg(d, v);
-}
-01dddsss - MOV !d, !s - 5 {
-  let v = st.reg(s);
-  st.set_reg(d, v);
+01dddsss - MOV ?d, ?s - 5/7 {
+  let v = st.reg_m(s);
+  st.set_reg_m(d, v);
 }
 
 00ddd110 - MVI ?d, #i - 7 {
