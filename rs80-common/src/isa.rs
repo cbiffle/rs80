@@ -1,3 +1,5 @@
+//! Common definitions for modeling the 8080.
+
 /// Names and encodings of 8-bit registers used in operand positions.
 #[derive(Copy, Clone, Debug)]
 pub enum Reg {
@@ -13,6 +15,7 @@ pub enum Reg {
 
 /// Parsing three-bit register operand field.
 impl From<u8> for Reg {
+    #[inline]
     fn from(x: u8) -> Reg {
         match x {
             0b000 => Reg::B,
@@ -47,6 +50,7 @@ pub enum RegM {
 impl RegM {
     /// Returns one value or the other, depending on whether `self` is a
     /// register or memory operand. This is useful for changing cycle counts.
+    #[inline]
     pub fn reg_or_m<T>(self, r: T, m: T) -> T {
         match self {
             RegM::M => m,
@@ -57,6 +61,7 @@ impl RegM {
 
 /// Parsing three-bit operand field.
 impl From<u8> for RegM {
+    #[inline]
     fn from(x: u8) -> RegM {
         match x {
             0b110 => RegM::M,
@@ -76,6 +81,7 @@ pub enum RegPair {
 }
 
 impl From<u8> for RegPair {
+    #[inline]
     fn from(x: u8) -> RegPair {
         match x {
             0b00 => RegPair::BC,
@@ -102,6 +108,7 @@ pub enum CC {
 
 /// Parsing three-bit condition field into `CC`.
 impl From<u8> for CC {
+    #[inline]
     fn from(x: u8) -> CC {
         match x {
             0b000 => CC::NZ,
@@ -123,6 +130,7 @@ pub struct Opcode(pub u8);
 
 impl Opcode {
     /// Extracts bits `[hi:lo]` (inclusive) as a `T`.
+    #[inline]
     pub fn bits<T>(self, hi: u32, lo: u32) -> T
         where u8: Into<T>
     {
@@ -134,17 +142,21 @@ impl Opcode {
         ((self.0 >> lo) & ((1 << width) - 1)).into()
     }
 
+    #[inline]
     pub fn con(self, hi: u32, lo: u32) -> u8 {
         self.bits(hi, lo)
     }
+    #[inline]
     pub fn regm(self, hi: u32, lo: u32) -> RegM {
         self.bits(hi, lo)
     }
 
+    #[inline]
     pub fn rp(self, hi: u32, lo: u32) -> RegPair {
         self.bits(hi, lo)
     }
 
+    #[inline]
     pub fn bit(self, idx: u32) -> bool {
         (self.0 >> idx) & 1 != 0
     }

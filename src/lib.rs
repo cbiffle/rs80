@@ -5,7 +5,8 @@
 #[macro_use]
 extern crate lazy_static;
 
-pub mod isa;
+extern crate rs80_common;
+
 pub mod emu;
 pub mod ops;
 pub mod dis;

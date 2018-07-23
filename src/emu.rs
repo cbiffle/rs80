@@ -1,5 +1,5 @@
 
-use super::isa::{CC, Reg, RegM, RegPair, Opcode};
+use rs80_common::isa::{CC, Reg, RegM, RegPair, Opcode};
 use super::ops;
 
 /// Holds the CPU condition flags.

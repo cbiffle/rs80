@@ -1,6 +1,6 @@
 
-use super::isa::{Opcode, Reg, RegPair, RegM, CC};
-use super::dis::{InsnInfo, Operand};
+use rs80_common::isa::{Opcode, Reg, RegPair, RegM, CC};
+use rs80_common::insn_info::{InsnInfo, Operand};
 use super::emu::{Emu, Flags, Ports};
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -170,7 +170,7 @@ include!(concat!(env!("OUT_DIR"), "/dispatch.rs"));
 
 lazy_static! {
     pub static ref INSN_INFO: [InsnInfo; 256] = {
-        use super::dis::Mnemonic;
+        use rs80_common::insn_info::Mnemonic;
 
         include!(concat!(env!("OUT_DIR"), "/disassemble.rs"))
     };

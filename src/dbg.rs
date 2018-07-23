@@ -4,7 +4,7 @@ use std::io::{self, prelude::*};
 use std::collections::HashMap;
 use std::fs;
 
-use super::isa::{Reg, RegPair};
+use rs80_common::isa::{Reg, RegPair};
 use super::emu;
 use super::dis;
 

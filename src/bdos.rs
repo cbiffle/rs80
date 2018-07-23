@@ -3,7 +3,7 @@
 use std::io::{self, Read};
 use std::fs;
 
-use super::isa::{RegPair, Reg};
+use rs80_common::isa::{RegPair, Reg};
 use super::emu::{Emu, run, RunError};
 
 pub fn load_image(path: String, emu: &mut Emu) -> io::Result<()> {
