@@ -12,6 +12,7 @@
 //! 4. `mod gen` implementing the code generator.
 
 extern crate combine;
+extern crate rs80_common;
 
 use std::cmp::Reverse;
 use std::io::{self, Read};
@@ -21,6 +22,8 @@ use std::path::Path;
 
 use combine::stream::state::State;
 use combine::Parser;
+
+use rs80_common::insn_info::{FType, IType, Operand};
 
 ////////////////////////////////////////////////////////////////////////////////
 // Entry point
@@ -83,41 +86,14 @@ pub struct Def {
     /// Mnemonic and optional condition code field identifier.
     mnem: (String, Option<char>),
     /// Operands from the assembly template.
-    operands: Vec<Operand>,
+    operands: Vec<AOperand>,
     /// Primary and optional secondary cycle count.
     cycles: (usize, Option<usize>),
     /// Rust code body.
     body: Vec<String>,
 }
 
-/// An operand from the assembly template.
-#[derive(Clone, Debug)]
-enum Operand {
-    /// Textual 'PSW' used for PUSH/POP instructions.
-    LiteralPSW,
-    /// Identifier and type of an opcode field.
-    Field(char, FieldOperand),
-    /// Identifier and type of an inline value.
-    Inline(char, InlineOperand),
-}
-
-/// Type of an opcode field.
-#[derive(Clone, Debug)]
-enum FieldOperand {
-    Reg16,
-    RegOrM,
-    Restart,
-}
-
-/// Type of an inline value.
-#[derive(Clone, Debug)]
-enum InlineOperand {
-    I8,
-    I16,
-    /// This is mostly equivalent to `I16` but I'm keeping them distinguished in
-    /// case I want to format them differently in the disassembler.
-    Address,
-}
+type AOperand = Operand<FType>;
 
 /// A bit pattern.
 #[derive(Clone, Debug)]
@@ -237,27 +213,25 @@ mod parse {
             .map(Pat)
     }
 
-    fn operand<I>() -> impl Parser<Input = I, Output = Operand>
+    fn operand<I>() -> impl Parser<Input = I, Output = AOperand>
         where I: Stream<Item = char>,
               I::Error: ParseError<I::Item, I::Range, I::Position>,
     {
         choice((
-                string("PSW").map(|_| Operand::LiteralPSW),
+                string("PSW").map(|_| Operand::PSW),
                 char('#').with(choice((
                             char('#').with(letter())
-                                .map(|c| Operand::Inline(c,
-                                                         InlineOperand::I16)),
+                                .map(|c| Operand::I(c, IType::I16)),
                             letter()
-                                .map(|c| Operand::Inline(c,
-                                                         InlineOperand::I8))))),
+                                .map(|c| Operand::I(c, IType::I8))))),
                 char('&').with(letter())
-                    .map(|c| Operand::Field(c, FieldOperand::Reg16)),
+                    .map(|c| Operand::F(c, FType::RP)),
                 char('?').with(letter())
-                    .map(|c| Operand::Field(c, FieldOperand::RegOrM)),
+                    .map(|c| Operand::F(c, FType::RM)),
                 char('@').with(letter())
-                    .map(|c| Operand::Inline(c, InlineOperand::Address)),
+                    .map(|c| Operand::I(c, IType::Address)),
                 char('*').with(letter())
-                    .map(|c| Operand::Field(c, FieldOperand::Restart)),
+                    .map(|c| Operand::F(c, FType::C3)),
                 ))
     }
 
@@ -367,47 +341,47 @@ mod gen {
         writeln!(out, "")
     }
 
-    fn format_operand(op: Option<&Operand>,
+    fn format_operand(op: Option<&AOperand>,
                       fields: &HashMap<char, u8>) -> &'static str {
         match op {
             None => "None",
-            Some(Operand::LiteralPSW) => "Some(Operand::PSW)",
-            Some(Operand::Field(c, f)) => {
+            Some(Operand::PSW) => "Some(Operand::PSW)",
+            Some(Operand::F(c, f)) => {
                 let val = fields[c];
                 match f {
-                    FieldOperand::Reg16 => match val {
-                        0 => "Some(Operand::RP(RegPair::BC))",
-                        1 => "Some(Operand::RP(RegPair::DE))",
-                        2 => "Some(Operand::RP(RegPair::HL))",
-                        _ => "Some(Operand::RP(RegPair::SP))",
+                    FType::RP => match val {
+                        0 => "Some(RegPair::BC.into())",
+                        1 => "Some(RegPair::DE.into())",
+                        2 => "Some(RegPair::HL.into())",
+                        _ => "Some(RegPair::SP.into())",
                     },
-                    FieldOperand::RegOrM => match val {
-                        0 => "Some(Operand::RM(RegM::R(Reg::B)))",
-                        1 => "Some(Operand::RM(RegM::R(Reg::C)))",
-                        2 => "Some(Operand::RM(RegM::R(Reg::D)))",
-                        3 => "Some(Operand::RM(RegM::R(Reg::E)))",
-                        4 => "Some(Operand::RM(RegM::R(Reg::H)))",
-                        5 => "Some(Operand::RM(RegM::R(Reg::L)))",
-                        6 => "Some(Operand::RM(RegM::M))",
-                        _ => "Some(Operand::RM(RegM::R(Reg::A)))",
+                    FType::RM => match val {
+                        0 => "Some(RegM::R(Reg::B).into())",
+                        1 => "Some(RegM::R(Reg::C).into())",
+                        2 => "Some(RegM::R(Reg::D).into())",
+                        3 => "Some(RegM::R(Reg::E).into())",
+                        4 => "Some(RegM::R(Reg::H).into())",
+                        5 => "Some(RegM::R(Reg::L).into())",
+                        6 => "Some(RegM::M.into())",
+                        _ => "Some(RegM::R(Reg::A).into())",
                     },
-                    FieldOperand::Restart => match val {
+                    FType::C3 => match val {
                         // TODO this is real silly
-                        0 => "Some(Operand::C3(0))",
-                        1 => "Some(Operand::C3(1))",
-                        2 => "Some(Operand::C3(2))",
-                        3 => "Some(Operand::C3(3))",
-                        4 => "Some(Operand::C3(4))",
-                        5 => "Some(Operand::C3(5))",
-                        6 => "Some(Operand::C3(6))",
-                        _ => "Some(Operand::C3(7))",
+                        0 => "Some(0u8.into())",
+                        1 => "Some(1u8.into())",
+                        2 => "Some(2u8.into())",
+                        3 => "Some(3u8.into())",
+                        4 => "Some(4u8.into())",
+                        5 => "Some(5u8.into())",
+                        6 => "Some(6u8.into())",
+                        _ => "Some(7u8.into())",
                     },
                 }
             },
-            Some(Operand::Inline(_, f)) => match f {
-                InlineOperand::I8 => "Some(Operand::I8)",
-                InlineOperand::I16 => "Some(Operand::I16)",
-                InlineOperand::Address => "Some(Operand::Addr)",
+            Some(Operand::I(_, f)) => match f {
+                IType::I8 => "Some(Operand::I('?', IType::I8))",
+                IType::I16 => "Some(Operand::I('?', IType::I16))",
+                IType::Address => "Some(Operand::I('?', IType::Address))",
             },
         }
     }
@@ -480,10 +454,10 @@ mod gen {
             // Bind any named fields.
             for op in &def.operands {
                 match op {
-                    &Operand::Field(c, ref o) => {
+                    &Operand::F(c, ref o) => {
                         field_into_scope(c, o, fields[&c], out)?
                     },
-                    &Operand::Inline(c, ref o) => {
+                    &Operand::I(c, ref o) => {
                         inline_into_scope(c, o, out)?
                     },
                     _ => (),  // ignore the literals
@@ -528,28 +502,28 @@ mod gen {
                  n, bits)
     }
 
-    fn field_into_scope(n: char, o: &FieldOperand, bits: u8,
+    fn field_into_scope(n: char, o: &FType, bits: u8,
                         out: &mut impl io::Write)
         -> io::Result<()>
     {
         write!(out, "      ")?; // common indent
         match o {
-            FieldOperand::RegOrM =>
+            FType::RM =>
                 writeln!(out, "let {} = RegM::from({}u8);", n, bits),
-            FieldOperand::Reg16 =>
+            FType::RP =>
                 writeln!(out, "let {} = RegPair::from({}u8);", n, bits),
-            FieldOperand::Restart =>
+            FType::C3 =>
                 writeln!(out, "let {} = {}u16 * 8;", n, bits),
         }
     }
-    fn inline_into_scope(n: char, o: &InlineOperand, out: &mut impl io::Write)
+    fn inline_into_scope(n: char, o: &IType, out: &mut impl io::Write)
         -> io::Result<()>
     {
         write!(out, "      ")?; // common indent
         match o {
-            InlineOperand::I8 =>
+            IType::I8 =>
                 writeln!(out, "let {} = st.take_imm8();", n),
-            InlineOperand::I16 | InlineOperand::Address =>
+            IType::I16 | IType::Address =>
                 writeln!(out, "let {} = st.take_imm16();", n),
         }
     }

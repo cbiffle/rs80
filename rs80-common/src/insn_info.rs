@@ -1,37 +1,46 @@
 use super::isa::{CC, RegM, RegPair};
 
 #[derive(Copy, Clone, Debug)]
-pub enum Operand {
-    RM(RegM),
-    RP(RegPair),
+pub enum Operand<FT = (FType, u8)> {
+    F(char, FT),
+    I(char, IType),
     PSW,
-    C3(u8),
+}
+
+#[derive(Copy, Clone, Debug)]
+pub enum FType {
+    RM,
+    RP,
+    C3,
+}
+
+#[derive(Copy, Clone, Debug)]
+pub enum IType {
     I8,
-    Port8,
     I16,
-    Addr,
+    Address,
 }
 
 impl Operand {
     fn addl_bytes(self) -> usize {
         match self {
-            Operand::I8 | Operand::Port8 => 1,
-            Operand::I16 | Operand::Addr => 2,
+            Operand::I(_, IType::I8) => 1,
+            Operand::I(_, IType::I16) => 2,
             _ => 0,
         }
     }
 }
 
 impl From<RegM> for Operand {
-    fn from(v: RegM) -> Operand { Operand::RM(v) }
+    fn from(v: RegM) -> Operand { Operand::F('?', (FType::RM, v.into())) }
 }
 
 impl From<RegPair> for Operand {
-    fn from(v: RegPair) -> Operand { Operand::RP(v) }
+    fn from(v: RegPair) -> Operand { Operand::F('?', (FType::RP, v as u8)) }
 }
 
 impl From<u8> for Operand {
-    fn from(v: u8) -> Operand { Operand::C3(v) }
+    fn from(v: u8) -> Operand { Operand::F('?', (FType::C3, v as u8)) }
 }
 
 #[derive(Copy, Clone, Debug)]

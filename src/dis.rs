@@ -1,5 +1,5 @@
-use rs80_common::isa::RegM;
-use rs80_common::insn_info::Operand;
+use rs80_common::isa::{RegM, RegPair};
+use rs80_common::insn_info::{Operand, FType, IType};
 use super::ops;
 
 use std::io::{self, prelude::*};
@@ -47,31 +47,36 @@ fn print_operand(op: Operand,
                  out: &mut impl Write) -> io::Result<()>
 {
     match op {
-        Operand::RM(RegM::R(r)) => write!(out, "{:?}", r)?,
-        Operand::RM(m) => write!(out, "{:?}", m)?,
-        Operand::RP(rp) => write!(out, "{:?}", rp)?,
+        Operand::F(_, (f, v)) => match f {
+            FType::RM => match RegM::from(v) {
+                RegM::R(r) => write!(out, "{:?}", r)?,
+                m => write!(out, "{:?}", m)?,
+            },
+            FType::RP => write!(out, "{:?}", RegPair::from(v))?,
+            FType::C3 => write!(out, "{:02X}H", v * 8)?,
+        },
         Operand::PSW => write!(out, "PSW")?,
-        Operand::C3(c) => write!(out, "{:02X}H", c * 8)?,
-        Operand::I8 | Operand::Port8 => if let Some(i) = f.next() {
+        Operand::I(_, IType::I8) => if let Some(i) = f.next() {
             let i = i?;
             used.push(i);
             write!(out, "{:02X}H", i)?;
         } else {
-            write!(out, "???")?;
+            write!(out, "??")?;
         },
-        Operand::I16 | Operand::Addr => if let Some(lo) = f.next() {
-            let lo = lo?;
-            used.push(lo);
-            if let Some(hi) = f.next() {
-                let hi = hi?;
-                used.push(hi);
-                write!(out, "{:04X}H", (hi as u16) << 8 | (lo as u16))?;
+        Operand::I(_, IType::I16) | Operand::I(_, IType::Address) =>
+            if let Some(lo) = f.next() {
+                let lo = lo?;
+                used.push(lo);
+                if let Some(hi) = f.next() {
+                    let hi = hi?;
+                    used.push(hi);
+                    write!(out, "{:04X}H", (hi as u16) << 8 | (lo as u16))?;
+                } else {
+                    write!(out, "??{:02X}H", lo)?;
+                }
             } else {
-                write!(out, "???")?;
-            }
-        } else {
-            write!(out, "???")?
-        },
+                write!(out, "????H")?
+            },
     }
     Ok(())
 }

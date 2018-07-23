@@ -70,6 +70,16 @@ impl From<u8> for RegM {
     }
 }
 
+impl From<RegM> for u8 {
+    #[inline]
+    fn from(x: RegM) -> u8 {
+        match x {
+            RegM::M => 0b110,
+            RegM::R(x) => x as u8,
+        }
+    }
+}
+
 /// A 16-bit register pair operand. Note that the bits that would decode as `SP`
 /// sometimes pun for a completely different instruction.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
