@@ -1,0 +1,8 @@
+[package]
+name = "rs80-gen"
+version = "0.1.0"
+authors = ["Cliff L. Biffle <code@cliffle.com>"]
+
+[dependencies]
+combine = "3.3.6"
+rs80-common = { path = "../rs80-common" }

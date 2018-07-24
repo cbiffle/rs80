@@ -101,12 +101,21 @@ dependencies = [
  "combine 3.3.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "lazy_static 1.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "rs80-common 0.1.0",
+ "rs80-gen 0.1.0",
  "time 0.1.40 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
 name = "rs80-common"
 version = "0.1.0"
+
+[[package]]
+name = "rs80-gen"
+version = "0.1.0"
+dependencies = [
+ "combine 3.3.6 (registry+https://github.com/rust-lang/crates.io-index)",
+ "rs80-common 0.1.0",
+]
 
 [[package]]
 name = "strsim"

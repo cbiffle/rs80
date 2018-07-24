@@ -12,6 +12,7 @@ rs80-common = { path = "rs80-common" }
 [build-dependencies]
 combine = "3.3.6"
 rs80-common = { path = "rs80-common" }
+rs80-gen = { path = "rs80-gen" }
 
 [profile.release]
 debug = true
@@ -19,4 +20,5 @@ debug = true
 [workspace]
 members = [
   "rs80-common",
+  "rs80-gen",
 ]
