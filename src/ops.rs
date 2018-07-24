@@ -1,6 +1,5 @@
 
 use rs80_common::isa::{Opcode, Reg, RegPair, RegM, CC};
-use rs80_common::insn_info::{InsnInfo, Operand};
 use super::emu::{Emu, Flags, Ports};
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -160,18 +159,8 @@ fn compare(a: u8, b: u8, flags: &mut Flags) {
     sub(a, b, 0, flags);
 }
 
-
-
 pub struct Ctx<'a> {
     pub io: &'a mut Ports,
 }
 
 include!(concat!(env!("OUT_DIR"), "/dispatch.rs"));
-
-lazy_static! {
-    pub static ref INSN_INFO: [InsnInfo; 256] = {
-        use rs80_common::insn_info::{Mnemonic, IType, FType};
-
-        include!(concat!(env!("OUT_DIR"), "/disassemble.rs"))
-    };
-}
