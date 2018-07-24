@@ -170,7 +170,7 @@ include!(concat!(env!("OUT_DIR"), "/dispatch.rs"));
 
 lazy_static! {
     pub static ref INSN_INFO: [InsnInfo; 256] = {
-        use rs80_common::insn_info::{Mnemonic, IType};
+        use rs80_common::insn_info::{Mnemonic, IType, FType};
 
         include!(concat!(env!("OUT_DIR"), "/disassemble.rs"))
     };

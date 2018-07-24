@@ -23,6 +23,7 @@ use std::path::Path;
 use combine::stream::state::State;
 use combine::Parser;
 
+use rs80_common::isa::CC;
 use rs80_common::insn_info::{FType, IType, Operand};
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -342,47 +343,15 @@ mod gen {
     }
 
     fn format_operand(op: Option<&AOperand>,
-                      fields: &HashMap<char, u8>) -> &'static str {
+                      fields: &HashMap<char, u8>) -> String {
         match op {
-            None => "None",
-            Some(Operand::PSW) => "Some(Operand::PSW)",
-            Some(Operand::F(c, f)) => {
-                let val = fields[c];
-                match f {
-                    FType::RP => match val {
-                        0 => "Some(RegPair::BC.into())",
-                        1 => "Some(RegPair::DE.into())",
-                        2 => "Some(RegPair::HL.into())",
-                        _ => "Some(RegPair::SP.into())",
-                    },
-                    FType::RM => match val {
-                        0 => "Some(RegM::R(Reg::B).into())",
-                        1 => "Some(RegM::R(Reg::C).into())",
-                        2 => "Some(RegM::R(Reg::D).into())",
-                        3 => "Some(RegM::R(Reg::E).into())",
-                        4 => "Some(RegM::R(Reg::H).into())",
-                        5 => "Some(RegM::R(Reg::L).into())",
-                        6 => "Some(RegM::M.into())",
-                        _ => "Some(RegM::R(Reg::A).into())",
-                    },
-                    FType::C3 => match val {
-                        // TODO this is real silly
-                        0 => "Some(0u8.into())",
-                        1 => "Some(1u8.into())",
-                        2 => "Some(2u8.into())",
-                        3 => "Some(3u8.into())",
-                        4 => "Some(4u8.into())",
-                        5 => "Some(5u8.into())",
-                        6 => "Some(6u8.into())",
-                        _ => "Some(7u8.into())",
-                    },
-                }
-            },
-            Some(Operand::I(_, f)) => match f {
-                IType::I8 => "Some(Operand::I('?', IType::I8))",
-                IType::I16 => "Some(Operand::I('?', IType::I16))",
-                IType::Address => "Some(Operand::I('?', IType::Address))",
-            },
+            None => "None".into(),
+            Some(Operand::PSW) => "Some(Operand::PSW)".into(),
+            Some(Operand::F(c, f)) =>
+                format!("Some(Operand::F({:?}, (FType::{:?}, {})))",
+                        c, f, fields[c]),
+            Some(Operand::I(c, f)) =>
+                format!("Some(Operand::I({:?}, IType::{:?}))", c, f),
         }
     }
 
@@ -395,17 +364,9 @@ mod gen {
             comment(&def, &fields, out)?;
 
             let cc = match def.mnem.1 {
-                Some(n) => match fields[&n] {
-                    0 => "Some(CC::NZ)",
-                    1 => "Some(CC::Z)",
-                    2 => "Some(CC::NC)",
-                    3 => "Some(CC::C)",
-                    4 => "Some(CC::PO)",
-                    5 => "Some(CC::PE)",
-                    6 => "Some(CC::P)",
-                    _ => "Some(CC::N)",
-                },
-                None => "None",
+                Some(n) =>
+                    format!("Some(CC::{:?})", CC::from(fields[&n])),
+                None => "None".into(),
             };
 
             writeln!(out, "InsnInfo {{")?;
@@ -413,8 +374,10 @@ mod gen {
             writeln!(out, "    label: \"{}\",", def.mnem.0)?;
             writeln!(out, "    cc: {},", cc)?;
             writeln!(out, "  }},")?;
-            writeln!(out, "  a: {},", format_operand(def.operands.get(0), &fields))?;
-            writeln!(out, "  b: {},", format_operand(def.operands.get(1), &fields))?;
+            writeln!(out, "  a: {},",
+                     format_operand(def.operands.get(0), &fields))?;
+            writeln!(out, "  b: {},",
+                     format_operand(def.operands.get(1), &fields))?;
             writeln!(out, "}},")?;
         }
         writeln!(out, "]")?;
