@@ -25,7 +25,7 @@ fn main() -> std::io::Result<()> {
     let start = PreciseTime::now();
     let out = io::stdout();
     let mut out = out.lock();
-    match run_bdos(&mut emu, &mut out) {
+    match run_bdos(&mut emu, &mut (), &mut out) {
         Ok(final_pc) => println!("\nWARM BOOT from {:04X}", final_pc),
         Err(BdosError::UnhandledBdosCall(c, pc)) =>
             println!("\nERROR: unhandled BDOS call {} at {:04X}", c, pc),
