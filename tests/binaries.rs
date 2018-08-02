@@ -1,7 +1,7 @@
 extern crate rs80;
 
 use rs80::emu::Emu;
-use rs80::bdos::run_bdos;
+use rs80::bdos::{self, run_bdos};
 
 use std::io;
 
@@ -11,10 +11,12 @@ fn contains_substring(haystack: &[u8], needle: &[u8]) -> bool {
 
 fn run_image(image: &[u8]) -> (u16, Vec<u8>) {
     let mut emu = Emu::default();
-    emu.mem[0x100..(0x100 + image.len())].copy_from_slice(image);
+
+    bdos::load_image_(image, &mut emu);
+    bdos::initialize_page_zero(&mut emu);
     let mut out = io::Cursor::new(vec![]);
 
-    match run_bdos(&mut emu, &mut out) {
+    match run_bdos(&mut emu, &mut (), &mut out) {
         Ok(addr) => (addr, out.into_inner()),
         Err(e) => panic!("Unexpected error running test: {:?}", e),
     }
