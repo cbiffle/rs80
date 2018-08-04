@@ -1,6 +1,9 @@
 //! Common definitions for modeling the 8080.
 
 /// Names and encodings of 8-bit registers used in operand positions.
+/// 
+/// This type includes only the machine registers (it skips the `M` encoding) so
+/// it can be used for register access without a runtime check.
 #[derive(Copy, Clone, Debug)]
 pub enum Reg {
     B = 0b000,
@@ -70,6 +73,8 @@ impl From<u8> for RegM {
     }
 }
 
+/// Since `RegM` is too complex to get Rust's automatic conversions to primitive
+/// integers, we'll implement it ourselves.
 impl From<RegM> for u8 {
     #[inline]
     fn from(x: RegM) -> u8 {
@@ -90,6 +95,7 @@ pub enum RegPair {
     SP = 0b11,
 }
 
+/// Decoding two-bit register pair fields.
 impl From<u8> for RegPair {
     #[inline]
     fn from(x: u8) -> RegPair {
@@ -134,7 +140,8 @@ impl From<u8> for CC {
     }
 }
 
-/// A byte-sized instruction opcode.
+/// A byte-sized instruction opcode. This is basically just a newtype for `u8`
+/// that provides convenient bit accessors.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub struct Opcode(pub u8);
 
@@ -152,20 +159,25 @@ impl Opcode {
         ((self.0 >> lo) & ((1 << width) - 1)).into()
     }
 
+    /// Convenient shorthand for `bits::<u8>`.
     #[inline]
     pub fn con(self, hi: u32, lo: u32) -> u8 {
         self.bits(hi, lo)
     }
+
+    /// Convenient shorthand for `bits::<RegM>`.
     #[inline]
     pub fn regm(self, hi: u32, lo: u32) -> RegM {
         self.bits(hi, lo)
     }
 
+    /// Convenient shorthand for `bits::<RegPair>`.
     #[inline]
     pub fn rp(self, hi: u32, lo: u32) -> RegPair {
         self.bits(hi, lo)
     }
 
+    /// Single-bit accessor.
     #[inline]
     pub fn bit(self, idx: u32) -> bool {
         (self.0 >> idx) & 1 != 0
