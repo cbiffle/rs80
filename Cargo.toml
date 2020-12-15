@@ -5,9 +5,7 @@ authors = ["Cliff L. Biffle <code@cliffle.com>"]
 edition = "2018"
 
 [dependencies]
-time = "0.1.40"
-lazy_static = "1.0"
-clap = "2.32"
+clap = "2.33.3"
 rs80-common = { path = "rs80-common" }
 
 [build-dependencies]

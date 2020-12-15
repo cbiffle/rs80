@@ -3,14 +3,12 @@ use rs80_common::insn_info::{Operand, FType, IType};
 use std::io::{self, prelude::*};
 use rs80_common::insn_info::InsnInfo;
 
-lazy_static! {
-    static ref INSN_INFO: [InsnInfo; 256] = {
+static INSN_INFO: [InsnInfo; 256] = {
         use rs80_common::isa::*;
         use rs80_common::insn_info::*;
 
         include!(concat!(env!("OUT_DIR"), "/disassemble.rs"))
-    };
-}
+};
 
 pub fn disassemble(bytes: &mut impl Iterator<Item = io::Result<u8>>,
                    out: &mut impl Write) -> io::Result<usize> {

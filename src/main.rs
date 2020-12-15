@@ -1,14 +1,13 @@
 /// A simple emulator for the 8080 (or, really, a clone thereof -- this is
 /// tested against an emulator for the Soviet KR580VM80A).
 
-extern crate time;
 extern crate rs80;
 
 use rs80::emu::{Emu, RunError};
 use rs80::bdos::*;
 
 use std::io;
-use time::PreciseTime;
+use std::time::Instant;
 
 fn main() -> std::io::Result<()> {
     let mut args = std::env::args();
@@ -22,7 +21,7 @@ fn main() -> std::io::Result<()> {
     let mut emu = Emu::default();
     load_image(filename, &mut emu)?;
 
-    let start = PreciseTime::now();
+    let start = Instant::now();
     let out = io::stdout();
     let mut out = out.lock();
     initialize_page_zero(&mut emu);
@@ -36,12 +35,12 @@ fn main() -> std::io::Result<()> {
         Err(BdosError::RunError(RunError::UnimplementedInstruction(op, pc))) =>
             println!("\nERROR: unimplemented: {:02X} at {:04X}", op, pc),
     }
-    let duration = start.to(PreciseTime::now());
-    let cycle_ns = duration.num_nanoseconds().unwrap() as f64
+    let duration = start.elapsed();
+    let cycle_ns = duration.as_nanos() as f64
                  / emu.cycles as f64;
-    let inst_ns = duration.num_nanoseconds().unwrap() as f64
+    let inst_ns = duration.as_nanos() as f64
                  / emu.inst_count as f64;
-    println!("Took: {}", duration);
+    println!("Took: {:?}", duration);
     println!("8080 cycles: {}, {:.4} ns/cyc, {:.3} emulated MHz",
                 emu.cycles,
                 cycle_ns,
