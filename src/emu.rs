@@ -301,7 +301,7 @@ pub enum RunError {
 /// before it. (This is often `pc-1`, but may differ if the `HLT` was reached by
 /// a call or jump.)
 #[inline]
-pub fn run(emu: &mut Emu, io: &mut Ports) -> Result<(u16, u16), RunError> {
+pub fn run(emu: &mut Emu, io: &mut dyn Ports) -> Result<(u16, u16), RunError> {
     let mut pc = 0xFFFF;
     let mut last_pc;
 
@@ -324,7 +324,7 @@ pub fn run(emu: &mut Emu, io: &mut Ports) -> Result<(u16, u16), RunError> {
 /// On success, returns `Ok(halted)`, where `halted` is a flag indicating
 /// whether the executed instruction was a `HLT`.
 #[inline]
-pub fn step(emu: &mut Emu, io: &mut Ports) -> Result<bool, RunError> {
+pub fn step(emu: &mut Emu, io: &mut dyn Ports) -> Result<bool, RunError> {
     let mut ctx = ops::Ctx { io };
 
     let op = emu.take_imm8();

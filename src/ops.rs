@@ -160,7 +160,7 @@ fn compare(a: u8, b: u8, flags: &mut Flags) {
 }
 
 pub struct Ctx<'a> {
-    pub io: &'a mut Ports,
+    pub io: &'a mut dyn Ports,
 }
 
 include!(concat!(env!("OUT_DIR"), "/dispatch.rs"));

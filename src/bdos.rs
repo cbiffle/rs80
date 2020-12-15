@@ -58,7 +58,7 @@ pub fn run_bdos<W>(emu: &mut Emu,
 
 pub fn run_bdos_custom(emu: &mut Emu,
                        ports: &mut impl Ports,
-                       calls: &mut BdosCall)
+                       calls: &mut dyn BdosCall)
     -> Result<u16, BdosError>
 {
     // Start at 0x100 like CP/M.

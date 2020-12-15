@@ -189,7 +189,7 @@ impl<B, I, O> BdosCall for BdosSim<B, I, O>
                         .map_err(BdosError::Out)?;
 
                     {
-                        let mut dest =
+                        let dest =
                             &mut emu.memory_mut()[self.dma_addr as usize ..
                                          self.dma_addr as usize + 128];
                         let mut num_read = 0;

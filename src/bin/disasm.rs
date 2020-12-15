@@ -33,7 +33,7 @@ fn main() -> io::Result<()> {
 
     let stdin = io::stdin();
 
-    let input: Box<Read> = match matches.value_of("INPUT") {
+    let input: Box<dyn Read> = match matches.value_of("INPUT") {
         Some(filename) => Box::new(fs::File::open(filename)?),
         None => Box::new(stdin.lock()),
     };
