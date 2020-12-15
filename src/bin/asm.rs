@@ -88,11 +88,10 @@ impl<B, I, O> BdosSim<B, I, O> {
         let basename = &fcb[1..=8];
         let ext = &fcb[9..=11];
 
-        if drive > 1 || (drive == 0 && self.current_drive != 0) {
-            // Nonexistent drive, go away.
-            None
-        } else if basename != BASENAME {
-            // Weird file access, go away.
+        let nonexistent_drive = drive > 1 || (drive == 0 && self.current_drive != 0);
+        let odd_access = basename != BASENAME;
+        if nonexistent_drive || odd_access {
+            // Go away.
             None
         } else if ext == b"ASM" {
             Some(Files::Asm)

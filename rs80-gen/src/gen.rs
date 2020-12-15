@@ -30,7 +30,7 @@ fn comment(def: &Def, fields: &HashMap<char, u8>, out: &mut impl io::Write)
     for (c, v) in fields {
         write!(out, " {}={}", c, v)?;
     }
-    writeln!(out, "")
+    writeln!(out)
 }
 
 fn format_operand(op: Option<&AOperand>,
@@ -46,7 +46,7 @@ fn format_operand(op: Option<&AOperand>,
     }
 }
 
-pub fn disassemble(defs: &Vec<Def>, out: &mut impl io::Write)
+pub fn disassemble(defs: &[Def], out: &mut impl io::Write)
     -> io::Result<()>
 {
     writeln!(out, "[")?;
@@ -77,9 +77,10 @@ pub fn disassemble(defs: &Vec<Def>, out: &mut impl io::Write)
 }
 
 /// Generates the `dispatch` entry point from `defs` to `out`.
-pub fn dispatch(defs: &Vec<Def>, out: &mut impl io::Write)
+pub fn dispatch(defs: &[Def], out: &mut impl io::Write)
     -> io::Result<()>
 {
+
     // First we'll generate an entry point for each opcode. For a hex
     // opcode 'xx' the entry point is named 'opcode_xx'. Doing this improves
     // performance significantly compared to a giant 'match' (and makes
@@ -94,6 +95,7 @@ pub fn dispatch(defs: &Vec<Def>, out: &mut impl io::Write)
         // opcode entry points are used because we use them below.
         // (We can't allow(unused) an argument in current Rust.)
         writeln!(out, "#[allow(unused)]")?;
+        writeln!(out, "#[allow(clippy::erasing_op, clippy::identity_op)]")?;
         writeln!(out, "fn opcode_{:02x}(st: &mut Emu, \
                                         ctx: &mut Ctx) -> bool {{", op)?;
         // Standard bindings
@@ -107,11 +109,11 @@ pub fn dispatch(defs: &Vec<Def>, out: &mut impl io::Write)
         // Bind any named fields.
         for op in &def.operands {
             match op {
-                &Operand::F(c, ref o) => {
-                    field_into_scope(c, o, fields[&c], out)?
+                Operand::F(c, o) => {
+                    field_into_scope(*c, o, fields[&c], out)?
                 },
-                &Operand::I(c, ref o) => {
-                    inline_into_scope(c, o, out)?
+                Operand::I(c, o) => {
+                    inline_into_scope(*c, o, out)?
                 },
                 _ => (),  // ignore the literals
             }

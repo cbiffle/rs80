@@ -89,7 +89,7 @@ where I: Stream<Item = char>,
         mnem: m,
         operands: os,
         cycles: c,
-        body: body,
+        body,
     })
 }
 
@@ -102,7 +102,7 @@ where I: Stream<Item = char>,
     many(
         attempt(many(satisfy(|c| c != '\n')).skip(newline())
             .then(|s: String| {
-                if s.starts_with("}") {
+                if s.starts_with('}') {
                     unexpected("}").map(|_| "".to_string()).right()
                 } else {
                     value(s).left()

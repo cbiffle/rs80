@@ -8,7 +8,9 @@ use super::emu::{Emu, run, RunError, Ports};
 
 pub fn load_image(path: String, emu: &mut Emu) -> io::Result<()> {
     let mut file = fs::File::open(path)?;
-    file.read(&mut emu.mem[0x100..])?;
+    let mut vec = vec![];
+    file.read_to_end(&mut vec)?;
+    load_image_(&vec, emu);
     Ok(())
 }
 

@@ -47,7 +47,7 @@ fn main() -> io::Result<()> {
             },
             n => {
                 addr += n;
-                print!("\n");
+                println!();
             },
         }
     }

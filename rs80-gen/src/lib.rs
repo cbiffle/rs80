@@ -64,7 +64,7 @@ impl Pat {
     pub fn specificity(&self) -> usize {
         let mut s = 0;
         for part in &self.0 {
-            if let &PatPart::Bits(ref v) = part {
+            if let PatPart::Bits(v) = part {
                 s += v.len();
             }
         }
@@ -83,13 +83,14 @@ pub enum PatPart {
     Ignore(usize),
 }
 
+#[allow(clippy::len_without_is_empty)]
 impl PatPart {
     /// Determines the number of bits in this part.
     pub fn len(&self) -> usize {
         match self {
-            &PatPart::Bits(ref v) => v.len(),
-            &PatPart::Var(_, n) => n,
-            &PatPart::Ignore(n) => n,
+            PatPart::Bits(v) => v.len(),
+            PatPart::Var(_, n) => *n,
+            PatPart::Ignore(n) => *n,
         }
     }
 
@@ -101,19 +102,19 @@ impl PatPart {
     /// or `Ok(None)` if the bits were don't-care.
     pub fn matches(&self, mut val: u8) -> Result<Option<(char, u8)>, ()> {
         match self {
-            &PatPart::Bits(ref v) => {
+            PatPart::Bits(v) => {
                 for bit in v {
                     if *bit != ((val & 0x80) != 0) {
                         return Err(())
                     }
-                    val = val << 1;
+                    val <<= 1;
                 }
                 Ok(None)
             },
-            &PatPart::Var(c, n) => {
-                Ok(Some((c, val >> (8 - n))))
+            PatPart::Var(c, n) => {
+                Ok(Some((*c, val >> (8 - n))))
             },
-            &PatPart::Ignore(_) => Ok(None),
+            PatPart::Ignore(_) => Ok(None),
         }
     }
 }

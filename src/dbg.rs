@@ -119,7 +119,7 @@ impl Mon {
             let mut out = out.lock();
             write!(out, "\t{:02X}\t", addr)?;
             addr += dis::disassemble(&mut bytes, &mut out)?;
-            writeln!(out, "")?;
+            writeln!(out)?;
         }
         Ok(())
     }
@@ -294,8 +294,8 @@ impl Mon {
             },
             2 => {
                 let arg = words[1];
-                if arg.starts_with("-") {
-                    match u16::from_str_radix(&arg[1..], 16) {
+                if let Some(rest) = arg.strip_prefix("-") {
+                    match u16::from_str_radix(rest, 16) {
                         Err(_) => println!("Bad address: {}", arg),
                         Ok(a) => {
                             let p = self.breakpoints.remove(&a);
