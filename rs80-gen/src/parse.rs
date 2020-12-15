@@ -100,7 +100,7 @@ where I: Stream<Item = char>,
     between((char('{'), newline()),
     (char('}'), choice((eof(), newline().map(|_|())))),
     many(
-        r#try(many(satisfy(|c| c != '\n')).skip(newline())
+        attempt(many(satisfy(|c| c != '\n')).skip(newline())
             .then(|s: String| {
                 if s.starts_with("}") {
                     unexpected("}").map(|_| "".to_string()).right()
