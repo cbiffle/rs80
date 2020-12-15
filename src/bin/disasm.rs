@@ -1,6 +1,3 @@
-extern crate rs80;
-extern crate clap;
-
 use std::io::{self, Read};
 use std::fs;
 

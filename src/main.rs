@@ -1,7 +1,5 @@
-/// A simple emulator for the 8080 (or, really, a clone thereof -- this is
-/// tested against an emulator for the Soviet KR580VM80A).
-
-extern crate rs80;
+//! A simple emulator for the 8080 (or, really, a clone thereof -- this is
+//! tested against an emulator for the Soviet KR580VM80A).
 
 use rs80::emu::{Emu, RunError};
 use rs80::bdos::*;

@@ -3,9 +3,6 @@
 //! program-specific emulator that runs the assembler from CP/M 2.2, which
 //! I obtained from the internets.
 
-extern crate rs80;
-extern crate rs80_common;
-
 use rs80_common::isa::{Reg, RegPair};
 use rs80::emu::{Emu, RunError};
 use rs80::bdos::*;

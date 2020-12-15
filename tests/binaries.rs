@@ -1,5 +1,3 @@
-extern crate rs80;
-
 use rs80::emu::Emu;
 use rs80::bdos::{self, run_bdos};
 

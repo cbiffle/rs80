@@ -1,5 +1,3 @@
-extern crate rs80;
-
 use rs80::dbg::*;
 
 fn main() -> std::io::Result<()> {
