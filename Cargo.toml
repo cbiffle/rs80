@@ -14,7 +14,7 @@ rs80-common = { path = "rs80-common" }
 rs80-gen = { path = "rs80-gen" }
 
 [profile.release]
-debug = true
+debug = 2
 
 [workspace]
 members = [
