@@ -99,7 +99,11 @@ pub struct Emu {
 
     pub inst_count: usize,
     /// Memory image.
-    pub mem: [u8; 65536],
+    ///
+    /// This is 64kiB + 1 so that we don't have to check for wrap during
+    /// accesses of 16-bit quantities -- we just read "off the end." (The last
+    /// byte is maintained in the store operations.)
+    pub mem: [u8; 65536 + 1],
 }
 
 /// Emulator reset state.
@@ -109,7 +113,7 @@ impl Default for Emu {
             registers: [0; 8],
             sp: 0,
             pc: 0,
-            mem: [0; 0x1_0000],
+            mem: [0; 0x1_0001],
             cycles: 0,
             interrupts: false,
             flags: Flags::default(),
@@ -189,13 +193,15 @@ impl Emu {
 
     /// Stores `val` to memory at `addr`.
     pub fn store(&mut self, addr: u16, val: u8) {
-        self.mem[addr as usize] = val
+        self.mem[addr as usize] = val;
+        // Maintain last byte to make loads cheaper.
+        self.mem[65536] = self.mem[0];
     }
 
     /// Loads from memory at `addr`.
     #[inline]
     pub fn load(&self, addr: u16) -> u8 {
-        self.mem[addr as usize]
+        self.mem[usize::from(addr)]
     }
 
     /// Stores a 16-bit `val` to memory, in little-endian order, at `addr` and
@@ -203,13 +209,17 @@ impl Emu {
     pub fn store16(&mut self, addr: u16, val: u16) {
         self.mem[addr as usize] = val as u8;
         self.mem[addr.wrapping_add(1) as usize] = (val >> 8) as u8;
+        // Maintain last byte to make loads cheaper.
+        self.mem[65536] = self.mem[0];
     }
 
     /// Loads a 16-bit word from memory, in little-endian order, at `addr` and
     /// `addr+1`.
     pub fn load16(&self, addr: u16) -> u16 {
-        (self.mem[addr as usize] as u16)
-            | ((self.mem[addr.wrapping_add(1) as usize] as u16) << 8)
+        let a = usize::from(addr);
+        // Exploit extra byte in memory image to avoid checking for wrap.
+        (self.mem[a] as u16)
+            | ((self.mem[a + 1] as u16) << 8)
     }
 
     /// Consumes an immediate byte from the instruction stream, advancing PC.
