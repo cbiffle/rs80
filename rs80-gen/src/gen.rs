@@ -83,8 +83,8 @@ pub fn dispatch(defs: &[Def], out: &mut impl io::Write)
 
     // First we'll generate an entry point for each opcode. For a hex
     // opcode 'xx' the entry point is named 'opcode_xx'. Doing this improves
-    // performance significantly compared to a giant 'match' (and makes
-    // profiles *significantly* easier to read).
+    // performance by 10-50% compared to a giant 'match' (and makes profiles
+    // *significantly* easier to read).
     for op in 0..=255 {
         let (def, fields) = find_def(&defs, op);
 
