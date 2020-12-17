@@ -40,7 +40,7 @@ impl Flags {
 
     pub fn aux(&self) -> bool {
         let (a, b, c, f) = self.aux_input;
-        f || ((a & 0xF) + (b & 0xF) + c) & 0x10 != 0
+        f | (((a & 0xF) + (b & 0xF) + c) & 0x10 != 0)
     }
 
     /// Packs the flags into the low bits of a `u16`. Used when pushing PSW.
