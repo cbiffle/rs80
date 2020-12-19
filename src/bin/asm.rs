@@ -48,6 +48,7 @@ fn main() -> std::io::Result<()> {
 
     let mut sim = BdosSim::new(ConsoleOnly(&mut out), source, listing, hex);
 
+    let start = std::time::Instant::now();
     match run_bdos_custom(&mut emu, &mut (), &mut sim) {
         Ok(_) => (),
         Err(BdosError::UnhandledBdosCall(c, pc)) =>
@@ -58,7 +59,14 @@ fn main() -> std::io::Result<()> {
         Err(BdosError::RunError(RunError::UnimplementedInstruction(op, pc))) =>
             println!("\nERROR: unimplemented: {:02X} at {:04X}", op, pc),
     }
+    let runtime = start.elapsed();
+    let inst_ns = runtime.as_nanos() as f64 / emu.inst_count as f64;
 
+     println!("(took {:?}, {} insns, {:.4} ns/inst, {:.3} Minst/s)",
+                runtime,
+                emu.inst_count,
+                inst_ns,
+                1000. / inst_ns);
     Ok(())
 }
 
