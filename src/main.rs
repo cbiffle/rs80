@@ -19,10 +19,12 @@ fn main() -> std::io::Result<()> {
     let mut emu = Emu::default();
     load_image(filename, &mut emu)?;
 
-    let start = Instant::now();
+    initialize_page_zero(&mut emu);
+
     let out = io::stdout();
     let mut out = out.lock();
-    initialize_page_zero(&mut emu);
+
+    let start = Instant::now();
     match run_bdos(&mut emu, &mut (), &mut out) {
         Ok(final_pc) => println!("\nWARM BOOT from {:04X}", final_pc),
         Err(BdosError::UnhandledBdosCall(c, pc)) =>
