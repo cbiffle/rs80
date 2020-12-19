@@ -87,7 +87,7 @@ pub struct Emu {
     /// pointer alignment is not required or maintained.
     sp: u16,
     /// Program counter.
-    pc: u16,
+    pc: usize,
     /// Cycle counter, increments for every 8080 cycle (*not* every emulated
     /// instruction).
     pub cycles: usize,
@@ -225,7 +225,7 @@ impl Emu {
     /// Consumes an immediate byte from the instruction stream, advancing PC.
     #[inline]
     pub fn take_imm8(&mut self) -> u8 {
-        let v = self.load(self.pc);
+        let v = self.load(self.pc as u16);
         self.pc = self.pc.wrapping_add(1);
         v
     }
@@ -233,26 +233,26 @@ impl Emu {
     /// Consumes an immediate word from the instruction stream, in little-endian
     /// order, advancing PC by two.
     pub fn take_imm16(&mut self) -> u16 {
-        let v = self.load16(self.pc);
+        let v = self.load16(self.pc as u16);
         self.pc = self.pc.wrapping_add(2);
         v
     }
 
     /// Effects a jump to `addr` by replacing the PC.
     pub fn jump(&mut self, addr: u16) {
-        self.pc = addr
+        self.pc = usize::from(addr)
     }
 
     /// Effects a call to `addr` by pushing the PC.
     pub fn call(&mut self, addr: u16) {
         let pc = self.pc;
-        self.push(pc);
-        self.pc = addr
+        self.push(pc as u16);
+        self.pc = usize::from(addr)
     }
 
     /// Effects a return by popping the PC.
     pub fn ret(&mut self) {
-        self.pc = self.pop()
+        self.pc = usize::from(self.pop())
     }
 
     /// Pushes `val` onto the stack.
@@ -283,7 +283,7 @@ impl Emu {
 
     #[inline]
     pub fn get_pc(&self) -> u16 {
-        self.pc
+        self.pc as u16
     }
 }
 
