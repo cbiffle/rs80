@@ -296,6 +296,8 @@ pub enum RunError {
     UnimplementedInstruction(u8, u16),
 }
 
+const TRACE: bool = false;
+
 /// Runs the emulation until the machine encounters a `HLT` (or an illegal
 /// instruction).
 ///
@@ -315,6 +317,14 @@ pub fn run(emu: &mut Emu, io: &mut dyn Ports) -> Result<(u16, u16), RunError> {
         last_pc = pc;
         // Record start of this instruction.
         pc = emu.get_pc();
+        if TRACE {
+            eprint!("{:04X}\t", pc);
+            crate::dis::disassemble(
+                &mut emu.mem[usize::from(pc)..].iter().cloned().map(Ok),
+                &mut std::io::stderr(),
+            ).unwrap();
+            eprintln!();
+        }
         let op = emu.take_imm8();
         emu.inst_count += 1;
         let halted = ops::dispatch(emu, &mut ctx, Opcode(op));
