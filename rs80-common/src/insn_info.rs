@@ -24,6 +24,16 @@ pub enum Operand<FT = (FType, u8)> {
     PSW,
 }
 
+impl<FT> Operand<FT> {
+    pub fn length(&self) -> usize {
+        if let Self::I(_, t) = self {
+            t.length()
+        } else {
+            0
+        }
+    }
+}
+
 /// Types of field operands.
 #[derive(Copy, Clone, Debug)]
 pub enum FType {
@@ -50,6 +60,15 @@ pub enum IType {
     Address,
 }
 
+impl IType {
+    pub fn length(&self) -> usize {
+        match self {
+            Self::I8 => 1,
+            Self::I16 | Self::Address => 2,
+        }
+    }
+}
+
 /// Textual mnemonic for an instruction, with optional condition code for
 /// jump/call/return. If present, the condition code is concatenated to the base
 /// label.
@@ -72,4 +91,11 @@ pub struct InsnInfo {
     pub a: Option<Operand>,
     /// Second explicit operand, if present.
     pub b: Option<Operand>,
+}
+
+impl InsnInfo {
+    pub fn length(&self) -> usize {
+        1 + self.a.map(|o| o.length()).unwrap_or(0)
+          + self.b.map(|o| o.length()).unwrap_or(0)
+    }
 }
