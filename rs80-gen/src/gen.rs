@@ -318,3 +318,28 @@ pub fn predecode(defs: &[Def], out: &mut impl io::Write)
                          .collect()")?;
     writeln!(out, "}}")
 }
+
+pub fn write_flag_accel(out: &mut impl io::Write) -> io::Result<()> {
+    // Zero, Parity, Sign can be accelerated using a common table.
+    writeln!(out, "static ZPS_ACCEL: [u8; 256] = [")?;
+    for i in 0..=255u8 {
+        let zero = i == 0;
+        let sign = i > 127;
+        let parity = i.count_ones() % 2 == 0;
+
+        let entry = u8::from(parity) << 2
+            | u8::from(zero) << 6
+            | u8::from(sign) << 7;
+
+        writeln!(out, "    0b{:08b},", entry)?;
+    }
+    writeln!(out, "];")?;
+
+    writeln!(out, "#[inline]")?;
+    writeln!(out, "pub fn calculate_zps(byte: u8) -> u8 {{")?;
+    writeln!(out, "    ZPS_ACCEL[byte as usize]")?;
+    writeln!(out, "}}")?;
+
+    Ok(())
+}
+

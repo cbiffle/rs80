@@ -6,16 +6,19 @@ use super::emu::{Emu, Flags, Ports};
 // Reusable (or at least *reused*) arithmetic operations.
 
 #[inline]
+fn apply_zps(flags: &mut Flags, result: u8) {
+    flags.zps = calculate_zps(result);
+}
+
+#[inline]
 fn add(a: u8, b: u8, c: u8, flags: &mut Flags) -> u8 {
     // This addition can't overflow because of the zero-extension.
     let sum16 = a as u16 + b as u16 + c as u16;
    
     let sum8 = sum16 as u8; // may get truncated here though, and that's OK
-    flags.zero = sum8 == 0;
     flags.carry = sum16 & 0x100 != 0;
-    flags.sign = sum8 & 0x80 != 0;
     flags.aux_input = (a, b, c, false);
-    flags.parity_input = sum8;
+    apply_zps(flags, sum8);
 
     sum8
 }
@@ -24,10 +27,8 @@ fn add(a: u8, b: u8, c: u8, flags: &mut Flags) -> u8 {
 fn inc(a: u8, flags: &mut Flags) -> u8 {
     let sum = a.wrapping_add(1);
    
-    flags.zero   = sum == 0;
+    apply_zps(flags, sum);
     flags.aux_input = (a, 1, 0, false);
-    flags.parity_input = sum;
-    flags.sign   = sum & 0x80 != 0;
 
     sum
 }
@@ -36,10 +37,8 @@ fn inc(a: u8, flags: &mut Flags) -> u8 {
 fn dec(a: u8, flags: &mut Flags) -> u8 {
     let sum = a.wrapping_sub(1);
    
-    flags.zero   = sum == 0;
+    apply_zps(flags, sum);
     flags.aux_input = (a, 0xFF, 0, false);
-    flags.parity_input = sum;
-    flags.sign   = sum & 0x80 != 0;
 
     sum
 }
@@ -48,10 +47,8 @@ fn dec(a: u8, flags: &mut Flags) -> u8 {
 fn and(a: u8, b: u8, flags: &mut Flags) -> u8 {
     let r = a & b;
    
-    flags.zero   = r == 0;
+    apply_zps(flags, r);
     flags.aux_input = (0,0,0, (a & 0x8) | (b & 0x8) != 0);
-    flags.sign   = r & 0x80 != 0;
-    flags.parity_input = r;
     flags.carry  = false;
 
     r
@@ -61,11 +58,9 @@ fn and(a: u8, b: u8, flags: &mut Flags) -> u8 {
 fn or(a: u8, b: u8, flags: &mut Flags) -> u8 {
     let r = a | b;
    
-    flags.zero = r == 0;
+    apply_zps(flags, r);
     flags.carry = false;
     flags.aux_input = (0, 0, 0, false);
-    flags.sign = r & 0x80 != 0;
-    flags.parity_input = r;
 
     r
 }
@@ -74,11 +69,9 @@ fn or(a: u8, b: u8, flags: &mut Flags) -> u8 {
 fn xor(a: u8, b: u8, flags: &mut Flags) -> u8 {
     let r = a ^ b;
    
-    flags.zero = r == 0;
+    apply_zps(flags, r);
     flags.carry = false;
     flags.aux_input = (0, 0, 0, false);
-    flags.sign = r & 0x80 != 0;
-    flags.parity_input = r;
 
     r
 }
@@ -89,11 +82,9 @@ fn sub(a: u8, b: u8, c: u8, flags: &mut Flags) -> u8 {
     let r16 = (a as u16).wrapping_sub(b as u16).wrapping_sub(c as u16);
    
     let r = r16 as u8;
-    flags.zero   = r == 0;
+    apply_zps(flags, r);
     flags.carry  = r16 & 0x100 != 0;
-    flags.sign   = r & 0x80 != 0;
     flags.aux_input = (a, !b, 1 - c, false);
-    flags.parity_input = r;
 
     r
 }
@@ -165,3 +156,4 @@ pub struct Ctx<'a> {
 
 include!(concat!(env!("OUT_DIR"), "/dispatch.rs"));
 include!(concat!(env!("OUT_DIR"), "/predecode.rs"));
+include!(concat!(env!("OUT_DIR"), "/flag_accel.rs"));

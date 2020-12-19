@@ -104,8 +104,8 @@ impl Mon {
                if self.machine.flags.carry  { 'C' } else { '-' },
                if self.machine.flags.parity() { 'P' } else { '-' },
                if self.machine.flags.aux()  { 'A' } else { '-' },
-               if self.machine.flags.zero   { 'Z' } else { '-' },
-               if self.machine.flags.sign   { 'S' } else { '-' })
+               if self.machine.flags.zero() { 'Z' } else { '-' },
+               if self.machine.flags.sign() { 'S' } else { '-' })
     }
     
     fn disassemble(&self) -> io::Result<()> {
