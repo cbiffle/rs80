@@ -222,6 +222,11 @@ impl Emu {
             | ((self.mem[a + 1] as u16) << 8)
     }
 
+    #[inline]
+    pub fn skip(&mut self, amt: usize) {
+        self.pc = self.pc.wrapping_add(amt);
+    }
+
     /// Consumes an immediate byte from the instruction stream, advancing PC.
     #[inline]
     pub fn take_imm8(&mut self) -> u8 {

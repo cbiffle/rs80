@@ -5,6 +5,7 @@ use std::fs;
 
 use rs80_common::isa::{RegPair, Reg};
 use super::emu::{Emu, run, RunError, Ports};
+use crate::emu2;
 
 pub fn load_image(path: String, emu: &mut Emu) -> io::Result<()> {
     let mut file = fs::File::open(path)?;
@@ -75,6 +76,45 @@ pub fn run_bdos_custom(emu: &mut Emu,
                     5 => { // CP/M syscall restart address
                         let function = emu.reg(Reg::C);
                         calls.call_function(function, emu)?
+                    },
+                    0 => {
+                        // Jump to exit vector
+                        return Ok(last_pc)
+                    },
+                    _ => return Err(BdosError::Halted(halt_addr))
+                }
+            },
+        }
+    }
+}
+
+pub fn run_bdos2<W>(emu: &mut emu2::Emu2,
+                   ports: &mut impl Ports,
+                   out: W)
+    -> Result<u16, BdosError>
+    where W: io::Write,
+{
+    let mut calls = ConsoleOnly(out);
+    run_bdos_custom2(emu, ports, &mut calls)
+}
+
+pub fn run_bdos_custom2(emu: &mut emu2::Emu2,
+                       ports: &mut impl Ports,
+                       calls: &mut dyn BdosCall)
+    -> Result<u16, BdosError>
+{
+    // Start at 0x100 like CP/M.
+    emu.core.jump(0x100);
+    emu.core.set_reg_pair(RegPair::SP, 0);
+
+    loop {
+        match emu2::run(emu, ports) {
+            Err(e) => return Err(BdosError::RunError(e)),
+            Ok((last_pc, halt_addr)) => {
+                match halt_addr {
+                    5 => { // CP/M syscall restart address
+                        let function = emu.core.reg(Reg::C);
+                        calls.call_function(function, &mut emu.core)?
                     },
                     0 => {
                         // Jump to exit vector

@@ -57,5 +57,11 @@ fn main() -> io::Result<()> {
         rs80_gen::gen::disassemble(&defs, &mut out)?;
     }
 
+    {
+        let out_path = Path::new(&out_dir).join("predecode.rs");
+        let mut out = fs::File::create(out_path)?;
+        rs80_gen::gen::predecode(&defs, &mut out)?;
+    }
+
     Ok(())
 }

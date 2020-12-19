@@ -170,6 +170,7 @@ fn field_into_scope(n: char, o: &FType, bits: u8,
             writeln!(out, "let {} = {}u16 * 8;", n, bits),
     }
 }
+
 fn inline_into_scope(n: char, o: &IType, out: &mut impl io::Write)
     -> io::Result<()>
 {
@@ -180,4 +181,140 @@ fn inline_into_scope(n: char, o: &IType, out: &mut impl io::Write)
             IType::I16 | IType::Address =>
                 writeln!(out, "let {} = st.take_imm16();", n),
     }
+}
+
+fn table_immediate_into_scope(n: char, o: &IType, out: &mut impl io::Write)
+    -> io::Result<()>
+{
+    write!(out, "      ")?; // common indent
+    match o {
+        IType::I8 =>
+            writeln!(out, "let {} = *table_immediate as u8;", n),
+        IType::I16 | IType::Address =>
+            writeln!(out, "let {} = *table_immediate as u16;", n),
+    }
+}
+
+/// Generates the predecode-related stuff from `defs` to `out`.
+pub fn predecode(defs: &[Def], out: &mut impl io::Write)
+    -> io::Result<()>
+{
+    writeln!(out, "pub type OpFn = fn(&mut Emu, &mut Ctx, &usize) -> bool;")?;
+
+    // Generate an evaluation function for each possible opcode, like in the
+    // dispatch table approach. Signatures are slightly different.
+    for op in 0..=255 {
+        let (def, fields) = find_def(&defs, op);
+
+        comment(&def, &fields, out)?;
+
+        // Opcode entry point. We allow(unused) because not every
+        // opcode uses the parameters to its function; we know all
+        // opcode entry points are used because we use them below.
+        // (We can't allow(unused) an argument in current Rust.)
+        writeln!(out, "#[allow(unused)]")?;
+        writeln!(out, "#[allow(clippy::erasing_op, clippy::identity_op)]")?;
+        writeln!(out, "fn thread_{:02x}(st: &mut Emu, \
+                                        ctx: &mut Ctx, \
+                                        table_immediate: &usize) -> bool {{", op)?;
+        // Standard bindings
+        writeln!(out, "    let opcode = Opcode({});", op)?;
+
+        // Bind condition success field if present.
+        if let Some(c) = def.mnem.1 {
+            condition_into_scope(c, fields[&c], out)?
+        }
+
+        let mut insn_len = 1;
+
+        // Bind any named fields.
+        for op in &def.operands {
+            match op {
+                Operand::F(c, o) => {
+                    field_into_scope(*c, o, fields[&c], out)?
+                },
+                Operand::I(c, o) => {
+                    table_immediate_into_scope(*c, o, out)?;
+
+                    match o {
+                        IType::I8 => insn_len += 1,
+                        IType::I16 | IType::Address => insn_len += 2,
+                    }
+                },
+                _ => (),  // ignore the literals
+            }
+        }
+
+        writeln!(out, "    st.skip({});", insn_len)?;
+
+        // Output the Rust code.
+        for line in &def.body {
+            writeln!(out, "    {}", line)?;
+        }
+        // Tack on a 'false' meaning 'we have not halted'. The
+        // only exception to this is HLT, which contains an explicit
+        // early return. Rustc does not currently complain about
+        // unreachable code past an early return.
+        writeln!(out, "    false")?;
+        writeln!(out, "}}")?;
+    }
+
+    // Now, output a _decoder_ function for each opcode that produces the
+    // appropriate tuple.
+    for op in 0..=255 {
+        let (def, fields) = find_def(&defs, op);
+
+        comment(&def, &fields, out)?;
+
+        // Opcode entry point. We allow(unused) because not every
+        // opcode uses the parameters to its function; we know all
+        // opcode entry points are used because we use them below.
+        // (We can't allow(unused) an argument in current Rust.)
+        writeln!(out, "#[allow(unused)]")?;
+        writeln!(out, "#[allow(clippy::erasing_op, clippy::identity_op)]")?;
+        writeln!(out, "fn decode_{:02x}(addr: usize, \
+                                        mem: &[u8]) -> (OpFn, usize) {{", op)?;
+
+        let mut immediate_present = false;
+        for op in &def.operands {
+            match op {
+                Operand::I(_, o) => {
+                    immediate_present = true;
+                    match o {
+                        IType::I8 => writeln!(
+                            out,
+                            "let immediate = usize::from(mem[addr + 1]);",
+                        )?,
+                        IType::I16 | IType::Address => writeln!(
+                            out,
+                            "let immediate = usize::from(mem[addr + 1]) | usize::from(mem[addr + 2]) << 8;",
+                        )?,
+                    }
+                },
+                _ => (),  // ignore the literals
+            }
+        }
+
+        if !immediate_present {
+            writeln!(out, "    let immediate = 0;")?;
+        }
+
+        writeln!(out, "    (thread_{:02x}, immediate)", op)?;
+        writeln!(out, "}}")?;
+    }
+
+    // Now, generate a facade that dispatches between the opcode entry
+    // points.
+    writeln!(out, "pub fn predecode(mem: &[u8]) -> Vec<(OpFn, usize)> {{")?;
+    // Decode table
+    writeln!(out, "  static TABLE: [fn(usize, &[u8]) -> (OpFn, usize); 256] = [")?;
+    for op in 0..=255 {
+        writeln!(out, "    decode_{:02x},", op)?;
+    }
+    writeln!(out, "  ];")?;
+
+    writeln!(out, "  mem.iter().enumerate() \
+                         .map(|(i, &b)| TABLE[usize::from(b)](i, mem))
+                         .collect()")?;
+    writeln!(out, "}}")
 }
