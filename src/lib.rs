@@ -3,7 +3,6 @@
 //! tested against an emulator for the Soviet KR580VM80A).
 
 pub mod emu;
-pub mod emu2;
 pub mod ops;
 pub mod dis;
 pub mod bdos;

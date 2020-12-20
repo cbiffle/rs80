@@ -155,5 +155,4 @@ pub struct Ctx<'a> {
 }
 
 include!(concat!(env!("OUT_DIR"), "/dispatch.rs"));
-include!(concat!(env!("OUT_DIR"), "/predecode.rs"));
 include!(concat!(env!("OUT_DIR"), "/flag_accel.rs"));

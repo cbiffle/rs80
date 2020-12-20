@@ -310,7 +310,7 @@ const TRACE: bool = false;
 /// a call or jump.)
 #[inline]
 pub fn run(emu: &mut Emu, io: &mut dyn Ports) -> Result<(u16, u16), RunError> {
-    let mut pc = 0xFFFF;
+    let mut pc = emu.get_pc() as usize;
     let mut last_pc;
 
     let mut ctx = ops::Ctx { io };
@@ -318,10 +318,8 @@ pub fn run(emu: &mut Emu, io: &mut dyn Ports) -> Result<(u16, u16), RunError> {
     let mut inst_count = 0;
 
     let r = loop {
-        // Move last instruction start into previous buffer.
         last_pc = pc;
-        // Record start of this instruction.
-        pc = emu.get_pc();
+
         if TRACE {
             eprint!("{:04X}\t", pc);
             crate::dis::disassemble(
@@ -330,15 +328,17 @@ pub fn run(emu: &mut Emu, io: &mut dyn Ports) -> Result<(u16, u16), RunError> {
             ).unwrap();
             eprintln!();
         }
-        let op = emu.take_imm8();
+        let op = emu.mem[pc & 0xFFFF];
         inst_count += 1;
-        let halted = ops::dispatch(emu, &mut ctx, Opcode(op));
-        if halted { break (last_pc as u16, pc as u16) }
+        let (halted, next_pc) = ops::dispatch(emu, &mut ctx, pc, Opcode(op));
+        if halted { break (last_pc as u16, pc as u16, next_pc as u16) }
+        pc = next_pc;
     };
 
     emu.inst_count = emu.inst_count.wrapping_add(inst_count);
+    emu.jump(r.2 as u16);
 
-    Ok(r)
+    Ok((r.0, r.1))
 }
 
 /// Steps the emulation by one instruction.
@@ -349,8 +349,10 @@ pub fn run(emu: &mut Emu, io: &mut dyn Ports) -> Result<(u16, u16), RunError> {
 pub fn step(emu: &mut Emu, io: &mut dyn Ports) -> Result<bool, RunError> {
     let mut ctx = ops::Ctx { io };
 
-    let op = emu.take_imm8();
+    let pc = emu.get_pc() as usize;
+    let op = emu.mem[pc & 0xFFFF];
     emu.inst_count += 1;
-    let halted = ops::dispatch(emu, &mut ctx, Opcode(op));
+    let (halted, next_pc) = ops::dispatch(emu, &mut ctx, pc, Opcode(op));
+    emu.jump(next_pc as u16);
     Ok(halted)
 }

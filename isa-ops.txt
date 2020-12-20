@@ -149,39 +149,41 @@
 # Flow control
 
 01110110 - HLT - 4 {
-  return true;
+  halted = true;
 }
 11nnn111 - RST *n - 11 {
-  st.call(n);
+  st.push(next_pc as u16);
+  next_pc = usize::from(n);
 }
 11__1101 - CALL @a - 17 {
-  st.call(a);
+  st.push(next_pc as u16);
+  next_pc = usize::from(a);
 }
 11ccc100 - Cc @a - 11/17 {
   if c {
-    st.call(a);
+    st.push(next_pc as u16);
+    next_pc = usize::from(a);
   }
 }
 110_1001 - RET - 10 {
-  st.ret();
+  next_pc = usize::from(st.pop());
 }
 11ccc000 - Rc - 11/5 {
   if c {
-    st.ret();
+    next_pc = usize::from(st.pop());
   }
 }
 1100_011 - JMP @a - 10 {
-  st.jump(a);
+  next_pc = usize::from(a);
 }
 11ccc010 - Jc @a - 10 {
   if c {
-    st.jump(a)
+    next_pc = usize::from(a);
   }
 }
 
 11101001 - PCHL - 5 {
-  let hl = st.reg_pair(RegPair::HL);
-  st.jump(hl);
+  next_pc = usize::from(st.reg_pair(RegPair::HL));
 }
 
 ################################################################################
