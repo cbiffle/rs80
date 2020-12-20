@@ -315,7 +315,9 @@ pub fn run(emu: &mut Emu, io: &mut dyn Ports) -> Result<(u16, u16), RunError> {
 
     let mut ctx = ops::Ctx { io };
 
-    loop {
+    let mut inst_count = 0;
+
+    let r = loop {
         // Move last instruction start into previous buffer.
         last_pc = pc;
         // Record start of this instruction.
@@ -329,10 +331,14 @@ pub fn run(emu: &mut Emu, io: &mut dyn Ports) -> Result<(u16, u16), RunError> {
             eprintln!();
         }
         let op = emu.take_imm8();
-        emu.inst_count += 1;
+        inst_count += 1;
         let halted = ops::dispatch(emu, &mut ctx, Opcode(op));
-        if halted { return Ok((last_pc, pc)) }
-    }
+        if halted { break (last_pc as u16, pc as u16) }
+    };
+
+    emu.inst_count = emu.inst_count.wrapping_add(inst_count);
+
+    Ok(r)
 }
 
 /// Steps the emulation by one instruction.
