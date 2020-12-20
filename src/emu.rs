@@ -73,7 +73,10 @@ pub struct Emu {
     /// Stack pointer. The stack is full-descending: this points to the most
     /// recently pushed value, and the next value will be pushed 2 lower. Stack
     /// pointer alignment is not required or maintained.
-    sp: u16,
+    ///
+    /// This is maintained as a `usize` for efficiency but only the bottom 16
+    /// bits are significant.
+    sp: usize,
     /// Program counter.
     pc: usize,
     /// Cycle counter, increments for every 8080 cycle (*not* every emulated
@@ -148,7 +151,7 @@ impl Emu {
     #[inline]
     pub fn reg_pair(&self, i: RegPair) -> u16 {
         match i {
-            RegPair::SP => self.sp,
+            RegPair::SP => self.sp as u16,
             _ => {
                 let offset = 2 * (i as usize);
                 debug_assert!(offset != 5 && offset != 6);
@@ -161,7 +164,7 @@ impl Emu {
     /// Updates a 16-bit register pair.
     pub fn set_reg_pair(&mut self, i: RegPair, v: u16) {
         match i {
-            RegPair::SP => self.sp = v,
+            RegPair::SP => self.sp = usize::from(v),
             _ => {
                 let offset = 2 * (i as usize);
                 debug_assert!(offset != 5 && offset != 6);
@@ -252,12 +255,12 @@ impl Emu {
     pub fn push(&mut self, val: u16) {
         self.sp = self.sp.wrapping_sub(2);
         let sp = self.sp;
-        self.store16(sp, val)
+        self.store16(sp as u16, val)
     }
 
     /// Pops a word from the stack.
     pub fn pop(&mut self) -> u16 {
-        let v = self.load16(self.sp);
+        let v = self.load16(self.sp as u16);
         self.sp = self.sp.wrapping_add(2);
         v
     }
