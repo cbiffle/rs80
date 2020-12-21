@@ -117,7 +117,7 @@ impl Emu {
     /// Accesses the current value of a register.
     #[inline]
     pub fn reg(&self, i: Reg) -> u8 {
-        self.registers[i as usize]
+        self.registers[i as usize ^ 1]
     }
 
     /// Accesses either a register or memory through `(HL)`.
@@ -133,7 +133,7 @@ impl Emu {
 
     /// Updates a register.
     pub fn set_reg(&mut self, i: Reg, v: u8) {
-        self.registers[i as usize] = v
+        self.registers[i as usize ^ 1] = v
     }
 
     /// Updates either a register or memory through `(HL)`.
@@ -155,8 +155,8 @@ impl Emu {
             _ => {
                 let offset = 2 * (i as usize);
                 debug_assert!(offset != 5 && offset != 6);
-                ((self.registers[offset] as u16) << 8)
-                    | (self.registers[offset + 1] as u16)
+                ((self.registers[offset ^ 1] as u16) << 8)
+                    | (self.registers[(offset + 1) ^ 1] as u16)
             },
         }
     }
@@ -168,8 +168,8 @@ impl Emu {
             _ => {
                 let offset = 2 * (i as usize);
                 debug_assert!(offset != 5 && offset != 6);
-                self.registers[offset] = (v >> 8) as u8;
-                self.registers[offset + 1] = v as u8;
+                self.registers[offset ^ 1] = (v >> 8) as u8;
+                self.registers[(offset + 1) ^ 1] = v as u8;
             },
         }
     }
