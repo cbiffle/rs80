@@ -313,15 +313,13 @@ const TRACE: bool = false;
 #[inline]
 pub fn run(emu: &mut Emu, io: &mut dyn Ports) -> Result<(u16, u16), RunError> {
     let mut pc = emu.get_pc() as usize;
-    let mut last_pc;
+    let mut last_pc = 0xFFFF;
 
     let mut ctx = ops::Ctx { io };
 
     let mut inst_count = 0;
 
-    let r = loop {
-        last_pc = pc;
-
+    let (last_pc, pc) = loop {
         if TRACE {
             eprint!("{:04X}\t", pc);
             crate::dis::disassemble(
@@ -333,14 +331,15 @@ pub fn run(emu: &mut Emu, io: &mut dyn Ports) -> Result<(u16, u16), RunError> {
         let op = emu.mem[pc & 0xFFFF];
         inst_count += 1;
         let (halted, next_pc) = ops::dispatch(emu, &mut ctx, pc, Opcode(op));
-        if halted { break (last_pc as u16, pc as u16, next_pc as u16) }
+        if halted { break (last_pc as u16, pc as u16) }
+        last_pc = pc;
         pc = next_pc;
     };
 
     emu.inst_count = emu.inst_count.wrapping_add(inst_count);
-    emu.jump(r.2 as u16);
+    emu.jump(pc.wrapping_add(1));
 
-    Ok((r.0, r.1))
+    Ok((last_pc, pc))
 }
 
 /// Steps the emulation by one instruction.
