@@ -35,7 +35,7 @@ impl<FT> Operand<FT> {
 }
 
 /// Types of field operands.
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum FType {
     /// 8-bit register or memory location. 3 bits wide. Memory, if used, is
     /// addressed indirectly through HL. This corresponds to the `RegM` type

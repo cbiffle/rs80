@@ -36,15 +36,20 @@ fn main() -> std::io::Result<()> {
             println!("\nERROR: unimplemented: {:02X} at {:04X}", op, pc),
     }
     let duration = start.elapsed();
-    let cycle_ns = duration.as_nanos() as f64
-                 / emu.cycles as f64;
+    println!("Took: {:?}", duration);
+
+    #[cfg(feature = "count-cycles")]
+    {
+        let cycle_ns = duration.as_nanos() as f64
+            / emu.cycles as f64;
+        println!("8080 cycles: {}, {:.4} ns/cyc, {:.3} emulated MHz",
+            emu.cycles,
+            cycle_ns,
+            1000. / cycle_ns);
+    }
+
     let inst_ns = duration.as_nanos() as f64
                  / emu.inst_count as f64;
-    println!("Took: {:?}", duration);
-    println!("8080 cycles: {}, {:.4} ns/cyc, {:.3} emulated MHz",
-                emu.cycles,
-                cycle_ns,
-                1000. / cycle_ns);
     println!("Instructions: {}, {:.4} ns/inst, {:.3} Minst/s",
                 emu.inst_count,
                 inst_ns,

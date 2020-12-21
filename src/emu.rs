@@ -81,6 +81,7 @@ pub struct Emu {
     pc: usize,
     /// Cycle counter, increments for every 8080 cycle (*not* every emulated
     /// instruction).
+    #[cfg(feature = "count-cycles")]
     pub cycles: usize,
     /// Interrupts enabled?
     interrupts: bool,
@@ -105,6 +106,7 @@ impl Default for Emu {
             sp: 0,
             pc: 0,
             mem: [0; 0x1_0001],
+            #[cfg(feature = "count-cycles")]
             cycles: 0,
             interrupts: false,
             flags: Flags::default(),

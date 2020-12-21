@@ -21,3 +21,7 @@ members = [
   "rs80-common",
   "rs80-gen",
 ]
+
+[features]
+default = []
+count-cycles = []

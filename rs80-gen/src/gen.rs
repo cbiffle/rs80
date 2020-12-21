@@ -103,16 +103,22 @@ pub fn dispatch(defs: &[Def], out: &mut impl io::Write)
         writeln!(out, "    let opcode = Opcode({});", op)?;
 
         // Bind condition success field if present.
+        let mut has_condition = None;
         if let Some(c) = def.mnem.1 {
-            condition_into_scope(c, fields[&c], out)?
+            condition_into_scope(c, fields[&c], out)?;
+            has_condition = Some(c);
         }
 
         // Bind any named fields.
         let mut insn_len = 1;
+        let mut has_m_ref = false;
         for op in &def.operands {
             match op {
                 Operand::F(c, o) => {
-                    field_into_scope(*c, o, fields[&c], out)?
+                    field_into_scope(*c, o, fields[&c], out)?;
+                    if *o == FType::RM && fields[&c] == 0b110 {
+                        has_m_ref = true;
+                    }
                 },
                 Operand::I(c, o) => {
                     write!(out, "      ")?; // common indent
@@ -132,6 +138,27 @@ pub fn dispatch(defs: &[Def], out: &mut impl io::Write)
 
         writeln!(out, "    let mut next_pc = pc.wrapping_add({});", insn_len)?;
         writeln!(out, "    let mut halted = false;")?;
+
+        writeln!(out, "    #[cfg(feature = \"count-cycles\")] {{")?;
+
+        let cycles_lo = def.cycles.0;
+        if let Some(cycles_hi) = def.cycles.1 {
+            if let Some(c) = has_condition {
+                writeln!(out,
+                    "        let cycles = if {} {{ {} }} else {{ {} }};",
+                    c, cycles_hi, cycles_lo)?;
+            } else if has_m_ref {
+                writeln!(out, "        let cycles = {};", cycles_hi)?;
+            } else {
+                writeln!(out, "        let cycles = {};", cycles_lo)?;
+            }
+        } else {
+            writeln!(out, "        let cycles = {};", cycles_lo)?;
+        }
+
+        writeln!(out, "        st.cycles += cycles;")?;
+
+        writeln!(out, "    }}")?; // end count-cycles block
 
         // Output the Rust code.
         for line in &def.body {
