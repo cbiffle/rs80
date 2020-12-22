@@ -66,8 +66,7 @@
 # Note that MOV M, M actually encodes a HLT, which is later in this file.
 
 01dddsss - MOV ?d, ?s - 5/7 {
-  let v = st.reg_m(s);
-  st.set_reg_m(d, v);
+  st.set_reg_m(d, st.reg_m(s));
 }
 
 00ddd110 - MVI ?d, #i - 7 {
@@ -86,25 +85,20 @@
 }
 
 11111001 - SPHL - 5 {
-  let hl = st.reg_pair(RegPair::HL);
-  st.set_reg_pair(RegPair::SP, hl);
+  st.set_reg_pair(RegPair::SP, st.reg_pair(RegPair::HL));
 }
 
 ################################################################################
 # Loads'n'Stores
 
 00111010 - LDA @a - 13 {
-  let v = st.load(a);
-  st.set_reg(Reg::A, v);
+  st.set_reg(Reg::A, st.load(a));
 }
 00101010 - LHLD @a - 16 {
-  let v = st.load16(a);
-  st.set_reg_pair(RegPair::HL, v);
+  st.set_reg_pair(RegPair::HL, st.load16(a));
 }
 00pp1010 - LDAX &p - 7 {
-  let addr = st.reg_pair(p);
-  let v = st.load(addr);
-  st.set_reg(Reg::A, v);
+  st.set_reg(Reg::A, st.load(st.reg_pair(p)));
 }
 11110001 - POP PSW - 10 {
   let psw = st.pop();
@@ -117,25 +111,19 @@
 }
 
 00110010 - STA @a - 13 {
-  let v = st.reg(Reg::A);
-  st.store(a, v);
+  st.store(a, st.reg(Reg::A));
 }
 00100010 - SHLD @a - 16 {
-  let v = st.reg_pair(RegPair::HL);
-  st.store16(a, v);
+  st.store16(a, st.reg_pair(RegPair::HL));
 }
 00pp0010 - STAX &p - 7 {
-  let addr = st.reg_pair(p);
-  let v = st.reg(Reg::A);
-  st.store(addr, v);
+  st.store(st.reg_pair(p), st.reg(Reg::A));
 }
 11110101 - PUSH PSW - 11 {
-  let psw = ((st.reg(Reg::A) as u16) << 8) | st.flags.bits();
-  st.push(psw);
+  st.push(((st.reg(Reg::A) as u16) << 8) | st.flags.bits());
 }
 11pp0101 - PUSH &p - 11 {
-  let v = st.reg_pair(p);
-  st.push(v);
+  st.push(st.reg_pair(p));
 }
 
 11100011 - XTHL - 18 {
@@ -215,37 +203,30 @@
 }
 
 00ddd100 - INR ?d - 5/10 {
-  let a = st.reg_m(d);
-  let r = inc(a, &mut st.flags);
+  let r = inc(st.reg_m(d), &mut st.flags);
   st.set_reg_m(d, r);
 }
 00ddd101 - DCR ?d - 5/10 {
-  let a = st.reg_m(d);
-  let r = dec(a, &mut st.flags);
+  let r = dec(st.reg_m(d), &mut st.flags);
   st.set_reg_m(d, r);
 }
 00pp0011 - INX &p - 5 {
-  let a = st.reg_pair(p);
-  st.set_reg_pair(p, a.wrapping_add(1));
+  st.set_reg_pair(p, st.reg_pair(p).wrapping_add(1));
 }
 00pp1011 - DCX &p - 5 {
-  let a = st.reg_pair(p);
-  st.set_reg_pair(p, a.wrapping_sub(1));
+  st.set_reg_pair(p, st.reg_pair(p).wrapping_sub(1));
 }
 
 10111sss - CMP ?s - 4/7 {
-  let a = st.reg(Reg::A);
-  let b = st.reg_m(s);
-  compare(a, b, &mut st.flags);
+  compare(st.reg(Reg::A), st.reg_m(s), &mut st.flags);
 }
 11111110 - CPI #i - 7 {
-  let a = st.reg(Reg::A);
-  compare(a, i, &mut st.flags);
+  compare(st.reg(Reg::A), i, &mut st.flags);
 }
 
 00pp1001 - DAD &p - 10 {
   // This can't overflow because of zero extension.
-  let r32 = st.reg_pair(p) as u32 + st.reg_pair(RegPair::HL) as u32;
+  let r32 = u32::from(st.reg_pair(p)) + u32::from(st.reg_pair(RegPair::HL));
   st.set_reg_pair(RegPair::HL, r32 as u16);
          
   st.flags.carry = r32 & 0x10000 != 0;
@@ -293,47 +274,41 @@
 }
 
 00101111 - CMA - 4 {
-  let a = st.reg(Reg::A);
-  st.set_reg(Reg::A, !a);
+  st.set_reg(Reg::A, !st.reg(Reg::A));
 }
 
 00110111 - STC - 4 {
   st.flags.carry = true;
 }
 00111111 - CMC - 4 {
-  let c = st.flags.carry;
-  st.flags.carry = !c;
+  st.flags.carry = !st.flags.carry;
 }
 
 00000111 - RLC - 4 {
   let a = st.reg(Reg::A);
-  let r = (a << 1) | (a >> 7);
 
   st.flags.carry = a & 0x80 != 0;
 
-  st.set_reg(Reg::A, r);
+  st.set_reg(Reg::A, (a << 1) | (a >> 7));
 }
 00010111 - RAL - 4 {
   let a = st.reg(Reg::A);
   // Carry goes into low bit,
-  let r = (a << 1) | (st.flags.carry as u8);
-  st.set_reg(Reg::A, r);
+  st.set_reg(Reg::A, (a << 1) | (st.flags.carry as u8));
   // and high bit goes into carry.
   st.flags.carry = a & 0x80 != 0;
 }
 00001111 - RRC - 4 {
   let a = st.reg(Reg::A);
-  let r = (a >> 1) | (a << 7);
 
   st.flags.carry = a & 1 != 0;
 
-  st.set_reg(Reg::A, r);
+  st.set_reg(Reg::A, (a >> 1) | (a << 7));
 }
 00011111 - RAR - 4 {
   let a = st.reg(Reg::A);
   // Carry goes into high bit,
-  let r = (a >> 1) | (st.flags.carry as u8) << 7;
-  st.set_reg(Reg::A, r);
+  st.set_reg(Reg::A, (a >> 1) | (st.flags.carry as u8) << 7);
   // And low bit goes into carry.
   st.flags.carry = a & 1 != 0;
 }
@@ -348,12 +323,10 @@
   st.set_interrupt_flag(false);
 }
 11011011 - IN #p - 10 {
-  let v = ctx.io.read_port(p);
-  st.set_reg(Reg::A, v);
+  st.set_reg(Reg::A, ctx.io.read_port(p));
 }
 11010011 - OUT #p - 10 {
-  let v = st.reg(Reg::A);
-  ctx.io.write_port(p, v);
+  ctx.io.write_port(p, st.reg(Reg::A));
 }
 
 ################################################################################
