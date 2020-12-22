@@ -12,7 +12,7 @@ use super::isa::CC;
 /// 1. When describing a class of instructions, `FT` is `FType`.
 /// 2. When describing a *particular* instruction, `FT` is `(FType, u8)`, giving
 ///    both the type and the *actual value* of the decoded instruction.
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
 pub enum Operand<FT = (FType, u8)> {
     /// A "field" operand encoded into the opcode byte.
     F(char, FT),
@@ -37,7 +37,7 @@ impl<FT> Operand<FT> {
 }
 
 /// Types of field operands.
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
 pub enum FType {
     /// 8-bit register or memory location. 3 bits wide. Memory, if used, is
     /// addressed indirectly through HL. This corresponds to the `RegM` type
@@ -50,7 +50,7 @@ pub enum FType {
 }
 
 /// Types of immediate operands.
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
 pub enum IType {
     /// 8-bit immediate byte.
     I8,

@@ -4,13 +4,14 @@
 //! codegen time improves performance by 16%.
 
 use std::io;
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use super::*;
 
 use rs80_common::isa::CC;
 use rs80_common::insn_info::IType;
 
-fn find_def(defs: &[Def], op: u8) -> (&Def, HashMap<char, u8>) {
+/// Scans `defs` until we find one that matches `op`.
+fn find_def(defs: &BTreeSet<Def>, op: u8) -> (&Def, HashMap<char, u8>) {
     // Scan the defs vec until we find a matching one.
     for def in defs {
         if let Some(fields) = def.bits.matches(op) {
@@ -33,6 +34,10 @@ fn comment(def: &Def, fields: &HashMap<char, u8>, out: &mut impl io::Write)
     writeln!(out)
 }
 
+/// Generates a Rust expression for encoding `op` into an `InsnInfo` struct,
+/// given the field definitions in the map.
+///
+/// The result has the type `Option<Operand>`.
 fn format_operand(op: Option<&AOperand>,
                   fields: &HashMap<char, u8>) -> String {
     match op {
@@ -46,7 +51,11 @@ fn format_operand(op: Option<&AOperand>,
     }
 }
 
-pub fn disassemble(defs: &[Def], out: &mut impl io::Write)
+/// Write the disassembly routines to `out` based on `defs`.
+///
+/// `defs` is required to be a `BTreeSet` to ensure that you have sorted it,
+/// which in turn ensures that it's in order of descending specificity.
+pub fn disassemble(defs: &BTreeSet<Def>, out: &mut impl io::Write)
     -> io::Result<()>
 {
     writeln!(out, "[")?;
@@ -77,7 +86,10 @@ pub fn disassemble(defs: &[Def], out: &mut impl io::Write)
 }
 
 /// Generates the `dispatch` entry point from `defs` to `out`.
-pub fn dispatch(defs: &[Def], out: &mut impl io::Write)
+///
+/// `defs` is required to be a `BTreeSet` to ensure that you have sorted it,
+/// which in turn ensures that it's in order of descending specificity.
+pub fn dispatch(defs: &BTreeSet<Def>, out: &mut impl io::Write)
     -> io::Result<()>
 {
 
@@ -209,6 +221,7 @@ fn field_into_scope(n: char, o: &FType, bits: u8,
     }
 }
 
+/// Writes the zero/parity/sign flag calculation acceleration table.
 pub fn write_flag_accel(out: &mut impl io::Write) -> io::Result<()> {
     // Zero, Parity, Sign can be accelerated using a common table.
     writeln!(out, "static ZPS_ACCEL: [u8; 256] = [")?;
@@ -232,4 +245,3 @@ pub fn write_flag_accel(out: &mut impl io::Write) -> io::Result<()> {
 
     Ok(())
 }
-

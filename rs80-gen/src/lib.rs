@@ -1,8 +1,5 @@
 //! ISA definition structures, parser, and codegen for rs80.
 
-extern crate combine;
-extern crate rs80_common;
-
 use rs80_common::insn_info::{FType, Operand};
 
 pub mod parse;
@@ -11,12 +8,15 @@ pub mod gen;
 /// An item found in the spec file.
 #[derive(Clone, Debug)]
 pub enum Item {
+    /// An instruction definition.
     Def(Def),
+    /// A comment. (We don't process comments, but this is here for
+    /// consistency.)
     Comment(String),
 }
 
 /// An instruction definition.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Def {
     /// Bit pattern.
     pub bits: Pat,
@@ -30,10 +30,34 @@ pub struct Def {
     pub body: Vec<String>,
 }
 
+/// Comparison for `Def` is arranged so that definitions are sorted in order of
+/// descending specificity -- that is, so that the earliest `Def` in a sorted
+/// list that matches a given opcode byte is the correct decode.
+impl Ord for Def {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        // Note: we can't _just_ compare on specificity because we need to be
+        // consistent with Eq. So all fields must be used:
+        self.bits.specificity().cmp(&other.bits.specificity()).reverse()
+            .then_with(|| self.bits.cmp(&other.bits))
+            .then_with(|| self.mnem.cmp(&other.mnem))
+            .then_with(|| self.operands.cmp(&other.operands))
+            .then_with(|| self.cycles.cmp(&other.cycles))
+            .then_with(|| self.body.cmp(&other.body))
+    }
+}
+
+impl PartialOrd for Def {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+/// Customize the `Operand` type from common for the case where the operand
+/// _value_ is not yet known.
 pub type AOperand = Operand<FType>;
 
 /// A bit pattern.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
 pub struct Pat(Vec<PatPart>);
 
 impl Pat {
@@ -73,7 +97,7 @@ impl Pat {
 }
 
 /// A field within a pattern.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
 pub enum PatPart {
     /// Some literal bits.
     Bits(Vec<bool>),
@@ -99,7 +123,7 @@ impl PatPart {
     /// If literal bits fail to match, returns `Err`.
     ///
     /// Otherwise, returns `Ok(Some((n, v)))` if a field `v` collected bits `n`,
-    /// or `Ok(None)` if the bits were don't-care.
+    /// or `Ok(None)` if the bits were literal match or don't-care.
     pub fn matches(&self, mut val: u8) -> Result<Option<(char, u8)>, ()> {
         match self {
             PatPart::Bits(v) => {
