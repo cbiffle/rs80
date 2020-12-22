@@ -1,0 +1,9 @@
+# CPU test binaries
+
+These are from the archives and I'm pretty sure all are public domain.
+Attribution:
+
+- `8080PRE.COM` and `8080EXM.COM` are attributed to Frank D. Cringle and Ian
+  Bartholomew.
+- `CPUTEST.COM` declares itself to be by SUPERSOFT ASSOCIATES (1981).
+- `TST8080.COM` declares itself to be by MICROCOSM ASSOCIATES (1980).
