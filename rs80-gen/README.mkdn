@@ -1,0 +1,9 @@
+# 8080 instruction set code generation
+
+This crate is used at build time to consume the `isa-ops.txt` and produce Rust
+code.
+
+The generated Rust code would be quite tedious to author and maintain by hand:
+it contains functions to both disassemble and (separately) emulate each of the
+256 possible 8-bit opcodes. Instead, the input file contains 59 instruction
+definitions which are processed and specialized.

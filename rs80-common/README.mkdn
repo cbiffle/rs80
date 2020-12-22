@@ -1,0 +1,4 @@
+# Common bits
+
+Stuff used by both the code generator at build-time, and the emulator at
+run-time, to keep their definitions in sync.

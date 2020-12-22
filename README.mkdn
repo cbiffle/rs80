@@ -2,7 +2,8 @@
 
 This is a bare-bones emulator for the Intel 8080 CPU from 1976. It is notable
 for being pretty fast despite being 100% memory-safe -- that means that no
-pointer arithmetic tricks, code generation, or other shenanigans were involved.
+pointer arithmetic tricks, dynamic code generation, or other shenanigans were
+involved.
 
 I started hacking on this a few years ago to research memory-safe
 high-performance emulation techniques, before starting a paid gig writing an
