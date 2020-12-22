@@ -10,6 +10,8 @@ use rs80::bdos::*;
 use std::io;
 use std::fs;
 
+/// You will need to provide your own copy of ASM.COM, because apparently Lineo
+/// put a weird license on it.
 static PROGRAM: &[u8] = include_bytes!("ASM.COM");
 
 fn main() -> std::io::Result<()> {
