@@ -25,6 +25,8 @@ pub enum Operand<FT = (FType, u8)> {
 }
 
 impl<FT> Operand<FT> {
+    /// Calculate the number of bytes (in addition to the opcode) required to
+    /// encode this operand.
     pub fn length(&self) -> usize {
         if let Self::I(_, t) = self {
             t.length()
@@ -61,6 +63,8 @@ pub enum IType {
 }
 
 impl IType {
+    /// Calculate the number of bytes (in addition to the opcode) required to
+    /// encode this immediate.
     pub fn length(&self) -> usize {
         match self {
             Self::I8 => 1,
@@ -94,6 +98,7 @@ pub struct InsnInfo {
 }
 
 impl InsnInfo {
+    /// Calculate the number of bytes required to encode this instruction.
     pub fn length(&self) -> usize {
         1 + self.a.map(|o| o.length()).unwrap_or(0)
           + self.b.map(|o| o.length()).unwrap_or(0)
