@@ -209,18 +209,6 @@ fn field_into_scope(n: char, o: &FType, bits: u8,
     }
 }
 
-fn inline_into_scope(n: char, o: &IType, out: &mut impl io::Write)
-    -> io::Result<()>
-{
-    write!(out, "      ")?; // common indent
-    match o {
-        IType::I8 =>
-            writeln!(out, "let {} = st.take_imm8();", n),
-            IType::I16 | IType::Address =>
-                writeln!(out, "let {} = st.take_imm16();", n),
-    }
-}
-
 pub fn write_flag_accel(out: &mut impl io::Write) -> io::Result<()> {
     // Zero, Parity, Sign can be accelerated using a common table.
     writeln!(out, "static ZPS_ACCEL: [u8; 256] = [")?;

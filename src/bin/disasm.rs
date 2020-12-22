@@ -1,3 +1,5 @@
+//! 8080 disassembler generated from the same tables as the interpreter.
+
 use std::io::{self, Read};
 use std::fs;
 

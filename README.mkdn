@@ -1,0 +1,86 @@
+# rs80: an 8080 emulator in Rust
+
+This is a bare-bones emulator for the Intel 8080 CPU from 1976. It is notable
+for being pretty fast despite being 100% memory-safe -- that means that no
+pointer arithmetic tricks, code generation, or other shenanigans were involved.
+
+I started hacking on this a few years ago to research memory-safe
+high-performance emulation techniques, before starting a paid gig writing an
+emulator. I've been tinkering on it since then because it's just complex enough
+to be interesting, but simple enough to understand. By modern standards, the
+8080 is a positively spartan CPU with a number of weird quirks.
+
+## Performance
+
+On my laptop, this performs like a 4.3 **GHz** 8080A, executing 502 million
+instructions per second. (Host: Intel i7-8550U, bursting to about 3.9GHz -- yes,
+the simulated 8080 has a faster effective clock speed than the host, because an
+8080 uses about 8 cycles per instruction, while the host can do many
+instructions *per cycle.*)
+
+## Implementation
+
+This is a carefully optimized dispatch-table emulator.
+
+There's a text file, `isa-ops.txt`, defining the 8080 instruction set. It's
+written in a domain-specific language and contains fragments of Rust code
+describing the effect of each instruction. (Many of the instructions refer to
+reusable functions such as `add`, which are defined in the `ops` module.)
+
+This file gets consumed by `rs80-gen`, which generates one function per opcode,
+called `opcode_00`, `opcode_01`, etc. Within each function, any fields that
+depend only on the opcode bits -- such as the registers used in a `MOV` -- are
+constants and can be optimized by the compiler.
+
+`rs80-gen` also generates a table of 256 function pointers holding the addresses
+of the `opcode_XX` routines, and an entry point, `dispatch`, for invoking them.
+
+The core emulation loop is `rs80::emu::run`, which advances machine state using
+`dispatch` until it hits a `HLT` instruction.
+
+So far, what I have described is a pretty standard dispatch-table engine --
+usually the second emulator one writes, after a `switch`-based one. So what
+makes this fast?
+
+Mostly, lots of care.
+
+- By specializing all `opcode_XX` routines for the precise opcode value, there's
+  no need to extract fields from instruction bytes -- and more importantly,
+  register accesses become loads-with-displacement at compile time. Similarly,
+  there's no need to interpret jump condition fields at runtime. This
+  dramatically reduces the number of host-code branches (and branch
+  mispredictions).
+
+- Parts of the layout of the machine state have been tweaked to let the emulator
+  load and store registers most efficiently. In particular, the register file is
+  byte-swapped to allow direct 16-bit accesses on little-endian hosts, and two
+  registers (PC and SP) are secretly extended to the full word size of the host
+  (usually 64 bits) to reduce unnecessary masking. These changes are invisible
+  to emulated programs.
+
+- Three of the five condition flags are computed by (generated) lookup table.
+  The most expensive flag (Aux) is computed lazily when used.
+
+- Care around calling conventions on x86-64 hosts lets me keep PC in a host
+  register without relying on assembler or non-portable hacks. It spends most of
+  its time in `%rdx` and gets stored back to memory only on halt for a
+  substantial improvement in performance.
+
+- RAM is fixed at 64kiB and indexed with `u16`, statically eliminating any need
+  for bounds checks. Okay, technically, RAM is 64kiB + one byte: the byte at
+  memory address zero is replicated at address 65536, so the host can use 16-bit
+  loads from any 16-bit address without need for wrapping or bounds checks.
+  (This imposes a slight cost increase on all stores.)
+
+- Profile, profile, profile. Repeat.
+
+Here's the generated x86-64 code (rustc 1.48) for `MOV A, M`.
+
+```
+add    $0x1,%rdx              Advance program counter past opcode
+movzwl 0x24(%rdi),%eax        Load 8080 HL into eax, zero extended
+mov    0x2f(%rdi,%rax,1),%al  Load byte in 8080 memory addressed by HL
+mov    %al,0x26(%rdi)         Place it in 8080 A register
+xor    %eax,%eax              Clear halt flag
+retq                          Return to dispatch loop
+```

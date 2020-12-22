@@ -4,7 +4,7 @@
 //! I obtained from the internets.
 
 use rs80_common::isa::{Reg, RegPair};
-use rs80::emu::{Emu, RunError};
+use rs80::emu::Emu;
 use rs80::bdos::*;
 
 use std::io;
@@ -58,8 +58,6 @@ fn main() -> std::io::Result<()> {
         Err(BdosError::Halted(pc)) =>
             println!("\nHALTED at {:04X}", pc),
         Err(BdosError::Out(e)) => return Err(e),
-        Err(BdosError::RunError(RunError::UnimplementedInstruction(op, pc))) =>
-            println!("\nERROR: unimplemented: {:02X} at {:04X}", op, pc),
     }
     let runtime = start.elapsed();
     let inst_ns = runtime.as_nanos() as f64 / emu.inst_count as f64;

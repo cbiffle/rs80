@@ -1,7 +1,7 @@
-//! A simple emulator for the 8080 (or, really, a clone thereof -- this is
-//! tested against an emulator for the Soviet KR580VM80A).
+//! Basic emulator driver with emulated CP/M console output and execution
+//! statistics.
 
-use rs80::emu::{Emu, RunError};
+use rs80::emu::Emu;
 use rs80::bdos::*;
 
 use std::io;
@@ -32,8 +32,6 @@ fn main() -> std::io::Result<()> {
         Err(BdosError::Halted(pc)) =>
             println!("\nHALTED at {:04X}", pc),
         Err(BdosError::Out(e)) => return Err(e),
-        Err(BdosError::RunError(RunError::UnimplementedInstruction(op, pc))) =>
-            println!("\nERROR: unimplemented: {:02X} at {:04X}", op, pc),
     }
     let duration = start.elapsed();
     println!("Took: {:?}", duration);
