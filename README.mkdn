@@ -19,6 +19,8 @@ the simulated 8080 has a faster effective clock speed than the host, because an
 8080 uses about 8 cycles per instruction, while the host can do many
 instructions *per cycle.*)
 
+This is about 10x faster than the other Rust 8080 emulator cores I've tested.
+
 ## Implementation
 
 This is a carefully optimized dispatch-table emulator.
