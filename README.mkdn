@@ -87,3 +87,66 @@ mov    %al,0x26(%rdi)         Place it in 8080 A register
 xor    %eax,%eax              Clear halt flag
 retq                          Return to dispatch loop
 ```
+
+# Fervently Anticipated Questions
+
+Nobody has actually asked any questions about this code yet. Here are some
+things I hope somebody will someday express interest in!
+
+**Q: Why use a dispatch loop with a single indirect branch? Won't that
+essentially guarantee that all dispatch branches are mispredicted?**
+
+Yes! And I have the Cachegrind results to prove it. But it proved not to
+dominate runtime.
+
+As people who read Anton Ertl papers or implement Forth kernels for fun know, it
+is almost always better to have each emulated instruction end in a separate
+indirect branch. I tried it. There are two issues:
+
+1. This amounts to a tailcall, and Rust can't express _guaranteed_ tailcalls. I
+   could get it working, but only in `--release` -- in debug it would blow the
+   stack almost instantly. This meant the code was flaky and at the whims of
+   future compiler changes.
+
+2. The performance did not significantly change. My Skylake-based CPU seems to
+   be doing a pretty ok job handling that mispredicted indirect branch. So it
+   was more complicated for no real gain.
+
+**Q: What about threaded code?**
+
+(N.B. this is about the implementation technique [threaded
+code](https://en.wikipedia.org/wiki/Threaded_code) and has nothing to do with
+using threads for parallelism.)
+
+It's possible to implement a pretty decent direct-threaded (DTC) engine in safe
+Rust, and on my test machine it is significantly slower than the dispatch table
+interpreter. DTC combines all the indirect branch overhead of the dispatch table
+with none of its cache efficiency.
+
+Plus, common 8080 programs routinely use self-modifying code, which is complex
+to handle correctly when you're translating code to an intermediate
+representation like DTC.
+
+**Q: What about subroutine threading, JIT compilation, etc?**
+
+Sure, any of these techniques could likely produce a faster emulator. However,
+such an emulator would be
+
+1. More complex.
+2. Less portable.
+3. Not memory-safe.
+
+Now, is it _theoretically possible_ to do JIT and reason about memory safety?
+Yes -- [I was a co-author a paper that explained
+how](http://cliffle.com/pub/safe-self-modification/). But as far as I'm aware no
+tech like that has been ported to Rust. Maybe someday!
+
+**Q: What about AMD / ARM / MIPS / VAX?**
+
+I only have one computer and it's Intel-based. I would love to take measurements
+on other CPUs to see if performance is similar.
+
+There is one Intel-specific optimization that won't help ARM (the calling
+convention hack to keep PC in `%rdx`).
+
+Performance will suffer on big-endian machines if you can still find one.
