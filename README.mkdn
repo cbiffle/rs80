@@ -1,15 +1,16 @@
 # rs80: an 8080 emulator in Rust
 
-This is a bare-bones emulator for the Intel 8080 CPU from 1976. It is notable
-for being pretty fast despite being 100% memory-safe -- that means that no
-pointer arithmetic tricks, dynamic code generation, or other shenanigans were
-involved.
+`rs80` is a bare-bones emulator for the Intel 8080 CPU (from 1974). The 8080 CPU
+is notable for being at the core of the first practical "personal computers."
+This emulator is notable for being pretty fast despite being 100% memory-safe --
+that means that no pointer arithmetic tricks, dynamic code generation, or other
+shenanigans were involved.
 
 I started hacking on this a few years ago to research memory-safe
 high-performance emulation techniques, before starting a paid gig writing an
-emulator. I've been tinkering on it since then because it's just complex enough
-to be interesting, but simple enough to understand. By modern standards, the
-8080 is a positively spartan CPU with a number of weird quirks.
+emulator. I've kept tinkering on it since then because, while it's simple enough
+to understand, it's just complex enough to be interesting. By modern standards,
+the 8080 is both a very spartan CPU, and a quirky one.
 
 ## Performance
 
@@ -19,7 +20,8 @@ the simulated 8080 has a faster effective clock speed than the host, because an
 8080 uses about 8 cycles per instruction, while the host can do many
 instructions *per cycle.*)
 
-This is about 10x faster than the other Rust 8080 emulator cores I've tested.
+This is considerably faster than the other Rust 8080 emulator cores I've tested,
+and is also faster than many C ones.
 
 ## Implementation
 
@@ -87,6 +89,9 @@ mov    %al,0x26(%rdi)         Place it in 8080 A register
 xor    %eax,%eax              Clear halt flag
 retq                          Return to dispatch loop
 ```
+
+This is pretty decent code, and is pretty close to what I would write by hand in
+assembly language.
 
 # Fervently Anticipated Questions
 
