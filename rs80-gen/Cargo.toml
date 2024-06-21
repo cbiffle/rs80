@@ -2,7 +2,7 @@
 name = "rs80-gen"
 version = "0.1.0"
 authors = ["Cliff L. Biffle <code@cliffle.com>"]
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 combine = "3.3.6"
