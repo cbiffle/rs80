@@ -113,7 +113,7 @@ impl Mon {
         let final_addr = addr + 16;
         let mut bytes = self.machine.mem.iter()
             .map(|&b| Ok(b))
-            .cycle().skip(addr as usize);
+            .cycle().skip(addr);
         let out = io::stdout();
         while addr < final_addr {
             let mut out = out.lock();
@@ -285,7 +285,7 @@ impl Mon {
             },
             2 => {
                 let arg = words[1];
-                if let Some(rest) = arg.strip_prefix("-") {
+                if let Some(rest) = arg.strip_prefix('-') {
                     match u16::from_str_radix(rest, 16) {
                         Err(_) => println!("Bad address: {}", arg),
                         Ok(a) => {

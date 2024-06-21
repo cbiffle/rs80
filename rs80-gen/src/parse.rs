@@ -24,7 +24,7 @@ where I: Stream<Item = char>,
         });
 
     let ignored_bits = many1(char('_'))
-        .map(|cs: Vec<_>| PatPart::Ignore(cs.into_iter().count()));
+        .map(|cs: Vec<_>| PatPart::Ignore(cs.len()));
 
     many1(choice((
         literal_bits,

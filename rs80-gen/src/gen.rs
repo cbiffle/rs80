@@ -60,8 +60,8 @@ pub fn disassemble(defs: &BTreeSet<Def>, out: &mut impl io::Write)
 {
     writeln!(out, "[")?;
     for op in 0..=255 {
-        let (def, fields) = find_def(&defs, op);
-        comment(&def, &fields, out)?;
+        let (def, fields) = find_def(defs, op);
+        comment(def, &fields, out)?;
 
         let cc = match def.mnem.1 {
             Some(n) =>
@@ -75,7 +75,7 @@ pub fn disassemble(defs: &BTreeSet<Def>, out: &mut impl io::Write)
         writeln!(out, "    cc: {},", cc)?;
         writeln!(out, "  }},")?;
         writeln!(out, "  a: {},",
-                 format_operand(def.operands.get(0), &fields))?;
+                 format_operand(def.operands.first(), &fields))?;
         writeln!(out, "  b: {},",
                  format_operand(def.operands.get(1), &fields))?;
         writeln!(out, "}},")?;
@@ -98,9 +98,9 @@ pub fn dispatch(defs: &BTreeSet<Def>, out: &mut impl io::Write)
     // performance by 10-50% compared to a giant 'match' (and makes profiles
     // *significantly* easier to read).
     for op in 0..=255 {
-        let (def, fields) = find_def(&defs, op);
+        let (def, fields) = find_def(defs, op);
 
-        comment(&def, &fields, out)?;
+        comment(def, &fields, out)?;
 
         // Opcode entry point. We allow(unused) because not every
         // opcode uses the parameters to its function; we know all
@@ -188,6 +188,7 @@ pub fn dispatch(defs: &BTreeSet<Def>, out: &mut impl io::Write)
                                    pc: usize, \
                                    opcode: Opcode) -> (bool, usize) {{")?;
     // The dispatch table itself:
+    writeln!(out, "  #[allow(clippy::type_complexity)]")?;
     writeln!(out, "  static TABLE: [fn(&mut Emu, &mut Ctx, usize) -> (bool, usize); 256] = [")?;
     for op in 0..=255 {
         writeln!(out, "    opcode_{:02x},", op)?;

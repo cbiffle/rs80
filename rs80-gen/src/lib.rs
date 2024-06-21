@@ -107,7 +107,7 @@ pub enum PatPart {
     Ignore(usize),
 }
 
-#[allow(clippy::len_without_is_empty)]
+#[allow(clippy::len_without_is_empty, clippy::result_unit_err)]
 impl PatPart {
     /// Determines the number of bits in this part.
     pub fn len(&self) -> usize {

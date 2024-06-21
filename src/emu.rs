@@ -363,7 +363,7 @@ pub fn run(emu: &mut Emu, io: &mut dyn Ports) -> (u16, u16) {
         if TRACE {
             eprint!("{:04X}\t", pc);
             crate::dis::disassemble(
-                &mut emu.mem[usize::from(pc)..].iter().cloned().map(Ok),
+                &mut emu.mem[pc..].iter().cloned().map(Ok),
                 &mut std::io::stderr(),
             ).unwrap();
             eprintln!();
